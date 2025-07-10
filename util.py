@@ -1,3 +1,7 @@
+import time
+from math import sqrt
+
+from matplotlib import pyplot as plt
 from ortools.linear_solver import pywraplp
 from ortools.sat.python import cp_model
 
@@ -33,6 +37,7 @@ class VarArraySolutionPrinterWithLimit(cp_model.CpSolverSolutionCallback):
     @property
     def solution_count(self) -> int:
         return self.__solution_count
+
 
 def bin_packing(weights, capa, log=False):
     num_items = len(weights)
@@ -90,6 +95,8 @@ def bin_packing(weights, capa, log=False):
     count : 몇개의 해를 구할 것인지
     timelimit : 시간 제약 (초단위)
 """
+
+
 def multiple_knapsack(weights, capa, K, count=20, timelimit=10, log=False):
     num_items = len(weights)
     all_items = range(num_items)
@@ -133,3 +140,53 @@ def multiple_knapsack(weights, capa, K, count=20, timelimit=10, log=False):
         return container.solutions
     else:
         print("ERROR : find solutions")
+
+"""
+    노드들의 좌표가 들어오면 거리행렬 반환
+    dist_matrix[i][j] : i에서 j까지 거리
+"""
+def get_distance(nodes_coord):
+    N = len(nodes_coord)
+    return [[int(sqrt((nodes_coord[i][0] - nodes_coord[j][0]) ** 2 + (nodes_coord[i][1] - nodes_coord[j][1]) ** 2)) for i in range(N)] for j in
+            range(N)]
+
+"""
+    depot : 출발 노드
+    nodes : 어떤 노드들을 최적화할 것인지, 노드들 인덱스 리스트, ex) [1,2, 5, 7, 8] 
+    dist_matrix : 거리 행렬
+    nodes_coord : 노드들 좌표
+"""
+def two_opt(depot, nodes, dist_matrix, nodes_coord, show=False):
+    improved = True
+    result_route = [i for i in nodes] + [depot]
+    st = time.time()
+    result_cost = sum(dist_matrix[result_route[i]][result_route[i + 1]] for i in range(len(nodes)))
+    while improved:
+        improved = False
+        for i in range(1, len(nodes) - 1):
+            for j in range(i + 1, len(nodes)):
+                # before : 기존 경로 / after : 변경된 부분
+                before = (dist_matrix[result_route[i - 1]][result_route[i]] + dist_matrix[result_route[j]][result_route[j + 1]])
+                after = (dist_matrix[result_route[i - 1]][result_route[j]] + dist_matrix[result_route[i]][result_route[j + 1]])
+                if after - before < 0:
+                    result_cost += after - before
+                    result_route = result_route[:i] + list(reversed(result_route[i:j + 1])) + result_route[j + 1:]
+                    improved = True
+    if show:
+        print("2opt------------------------------")
+        print(f"cost : {result_cost}")
+        print(f"route : {result_route}")
+        print(f"소요시간 {time.time() - st}")
+        plot(nodes_coord, result_route, f'ObjVal : {int(result_cost)}')
+    return result_cost, result_route
+
+
+def plot(nodes_coord, route, title=''):
+    points_x = [nodes_coord[x][0] for x in route]
+    points_y = [nodes_coord[x][1] for x in route]
+    plt.scatter(points_x, points_y)
+    plt.plot([points_x[i] for i in range(len(route))], [points_y[i] for i in range(len(route))], linestyle='-',
+             color='blue',
+             label='Line')
+    plt.title(title)
+    plt.show()
