@@ -1,5 +1,38 @@
 from ortools.linear_solver import pywraplp
+from ortools.sat.python import cp_model
 
+
+class SolContainer:
+    def __init__(self):
+        self.solutions = []
+
+
+class VarArraySolutionPrinterWithLimit(cp_model.CpSolverSolutionCallback):
+    """Print intermediate solutions."""
+
+    def __init__(self, variables: list[list[cp_model.BoolVarT]], limit: int, container: SolContainer):
+        cp_model.CpSolverSolutionCallback.__init__(self)
+        self.__variables = variables
+        self.__num_bin = len(variables[0])
+        self.__solution_count = 0
+        self.__solution_limit = limit
+        self.__container = container
+
+    def on_solution_callback(self) -> None:
+        self.__solution_count += 1
+        sol = [[] for _ in range(self.__num_bin)]
+        for idx, v in enumerate(self.__variables):
+            for jdx, vv in enumerate(v):
+                if self.value(vv) >= 0.5:
+                    sol[jdx].append(idx)
+        self.__container.solutions.append(sol)
+        if self.__solution_count >= self.__solution_limit:
+            # print(f"Stop search after {self.__solution_limit} solutions")
+            self.stop_search()
+
+    @property
+    def solution_count(self) -> int:
+        return self.__solution_count
 
 def bin_packing(weights, capa, log=False):
     num_items = len(weights)
@@ -51,3 +84,52 @@ def bin_packing(weights, capa, log=False):
         print(f'capa : {capa}')
         quit()
 
+
+"""
+    K : bin 수
+    count : 몇개의 해를 구할 것인지
+    timelimit : 시간 제약 (초단위)
+"""
+def multiple_knapsack(weights, capa, K, count=20, timelimit=10, log=False):
+    num_items = len(weights)
+    all_items = range(num_items)
+    all_bins = range(K)
+
+    model = cp_model.CpModel()
+
+    # Variables.
+    x = [[model.new_bool_var(f"x_{i}_{b}") for b in all_bins] for i in all_items]
+    # Constraints.
+    # Each item is assigned to at most one bin.
+    for i in all_items:
+        model.add(sum(x[i][b] for b in all_bins) == 1)
+
+    # The amount packed in each bin cannot exceed its capacity.
+    for b in all_bins:
+        model.add(
+            sum(x[i][b] * weights[i] for i in all_items)
+            <= capa
+        )
+
+    # 대칭성 제거 조건
+    for b in range(1, K):
+        model.add(sum(x[i][b - 1] * weights[i] for i in all_items) >= sum(x[i][b] * weights[i] for i in all_items))
+
+    container = SolContainer()
+    solution_printer = VarArraySolutionPrinterWithLimit(x, count, container)
+    solver = cp_model.CpSolver()
+    solver.parameters.enumerate_all_solutions = True
+    solver.parameters.max_time_in_seconds = timelimit
+    status = solver.solve(model, solution_printer)
+
+    if solver.status_name(status) == "FEASIBLE":
+        if log:
+            print(f"  elapsed time: {solver.wall_time} s")
+            print(f"  sol found: {solution_printer.solution_count}")
+            for idx, sol in enumerate(container.solutions):
+                print(f"sol {idx} --------------")
+                for jdx, bin in enumerate(sol):
+                    print(f"bin {jdx} : {bin}, weight_sum : {sum(weights[i] for i in bin)}, capa : {capa}")
+        return container.solutions
+    else:
+        print("ERROR : find solutions")
