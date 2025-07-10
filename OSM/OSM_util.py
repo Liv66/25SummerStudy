@@ -190,3 +190,13 @@ def plot(nodes_coord, route, title=''):
              label='Line')
     plt.title(title)
     plt.show()
+
+def plot_cvrp(nodes_coord, best_result_route, title=''):
+    for route in best_result_route:
+        points_x = [nodes_coord[x][0] for x in route]
+        points_y = [nodes_coord[x][1] for x in route]
+        plt.scatter(points_x, points_y)
+        plt.plot([points_x[i] for i in range(len(route))], [points_y[i] for i in range(len(route))], linestyle='-',
+                 label='Line')
+    plt.title(title)
+    plt.show()
