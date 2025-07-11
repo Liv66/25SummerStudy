@@ -4,6 +4,8 @@ import gurobipy as gp
 import time
 from gurobipy import GRB
 import numpy as np
+from scipy.stats import gaussian_kde
+
 from util_pure import two_opt, three_opt
 from collections import Counter
 
@@ -17,9 +19,9 @@ facility_capacity = 5000
 
 depot_coord = (12000, 16000)
 customer_coords = [(random.uniform(0, area_x), random.uniform(0, area_y)) for _ in range(n)]
-minx, miny = np.array(customer_coords).min(axis=0)
-maxx, maxy = np.array(customer_coords).max(axis=0)
-facility_coords = [(random.uniform(minx, maxx), random.uniform(miny, maxy)) for _ in range(m)]
+#minx, miny = np.array(customer_coords).min(axis=0)
+#maxx, maxy = np.array(customer_coords).max(axis=0)
+#facility_coords = [(random.uniform(minx, maxx), random.uniform(miny, maxy)) for _ in range(m)]
 demands = [max(1, int(random.gauss(demand_mean, demand_std))) for _ in range(n)]
 capacities = [facility_capacity for _ in range(m)]
 
@@ -33,6 +35,17 @@ dist_matrix = [
 ]
 
 start_time = time.time()
+
+# ---- Customer 분포 주청 ----
+kde = gaussian_kde(np.array(customer_coords).T)
+mins = np.min(customer_coords, axis=0)
+maxs = np.max(customer_coords, axis=0)
+
+# ---- ITERATION ----
+# 클리핑 (범위 밖이면 min/max로 잘라냄)
+raw_samples = kde.resample(m).T  # shape: (m, 2)
+clipped_samples = np.clip(raw_samples, mins, maxs)
+facility_coords = [tuple(coord) for coord in clipped_samples]
 
 # ---- SSCFLP 구하기 ----
 transport_cost = [
@@ -82,7 +95,7 @@ print(dist_matrix)
 # ======== 1. output.sol에서 routes 읽어오기 =========
 routes = []
 with open("output.sol") as f:
-    for line in f:
+    for line in  f:
         if line.startswith("Route"):
             parts = line.strip().split(":")
             route = [int(x) for x in parts[1].split()]
