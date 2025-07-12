@@ -106,15 +106,15 @@ class ACO_VRPB:
                 else:
                     break # 용량 초과 시 배송 단계 종료
 
-            # === 2단계: 반송(Backhaul) 경로 생성 ===
+            # 반송(Backhaul) 경로
             current_backhaul_demand = 0
 
             while unvisited_backhaul:
-                # 확률 계산 (오직 미방문 반송 노드만을 대상으로, 현재 위치는 마지막 배송 노드)
+                # 확률 계산 (미방문 반송 노드 대상으로, 현재 위치는 마지막 배송 노드)
                 probabilities = self._calculate_probabilities(current_node, unvisited_backhaul, feromones, edges)
                 next_node = numpy.random.choice(unvisited_backhaul, p=probabilities)
 
-                # 용량 제약 조건 (v) 확인 (반송 수요는 보통 절대값으로 계산)
+                # 5. 용량 제약 조건 확인 (반송 수요는 보통 절대값으로 계산)
                 if current_backhaul_demand + abs(demand[next_node]) <= capacityLimit:
                     path.append(next_node)
                     current_backhaul_demand += abs(demand[next_node])

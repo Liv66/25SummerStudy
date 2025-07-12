@@ -21,7 +21,7 @@ def OSM_main():
     random.shuffle(customer_demands)
     demands = [0] + customer_demands    # 전체 수요량 리스트 (0번 Depot 수요는 0)
     
-    #########풀기#########
+    """  ACO_VRPB 객체 생성 및 문제 해결  """
     ACO_solver = ACO_VRPB(iterations=200, ants=N)
 
     ACO_solution = ACO_solver.solve(N+1, capa, all_node_coord, demands)  # ACO로 VRPB 문제 해결
