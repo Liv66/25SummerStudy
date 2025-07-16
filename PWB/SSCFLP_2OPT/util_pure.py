@@ -7,27 +7,58 @@ def get_distance(nodes_coord):
     return [[int(sqrt((nodes_coord[i][0] - nodes_coord[j][0]) ** 2 +
                       (nodes_coord[i][1] - nodes_coord[j][1]) ** 2)) for i in range(N)] for j in range(N)]
 
-def two_opt(depot, nodes, dist_matrix, nodes_coord, show=False):
+def two_opt(depot, nodes, dist_matrix, nodes_coord=None, show=False):
+    """
+    2-OPT 로컬 서치 알고리즘
+    depot: int, 시작 및 종료 노드 (보통 0)
+    nodes: list[int], depot을 제외한 고객 노드들
+    dist_matrix: 2차원 거리 행렬
+    nodes_coord: (선택) 시각화용 노드 좌표
+    show: bool, True면 경로와 비용 출력 및 시각화
+    """
+    # 초기 경로: depot → 고객들 → depot
+    result_route = [depot] + nodes + [depot]
+
+    # 초기 비용 계산 (전체 경로)
+    result_cost = sum(
+        dist_matrix[result_route[i]][result_route[i + 1]]
+        for i in range(len(result_route) - 1)
+    )
+
     improved = True
-    result_route = [i for i in nodes] + [depot]
     st = time.time()
-    result_cost = sum(dist_matrix[result_route[i]][result_route[i + 1]] for i in range(len(nodes)))
+
     while improved:
         improved = False
-        for i in range(1, len(nodes) - 1):
-            for j in range(i + 1, len(nodes)):
-                before = (dist_matrix[result_route[i - 1]][result_route[i]] + dist_matrix[result_route[j]][result_route[j + 1]])
-                after = (dist_matrix[result_route[i - 1]][result_route[j]] + dist_matrix[result_route[i]][result_route[j + 1]])
-                if after - before < 0:
+        # 내부 고객 구간만 2-OPT 대상 (depot은 고정)
+        for i in range(1, len(result_route) - 2):
+            for j in range(i + 1, len(result_route) - 1):
+                # 기존 거리
+                before = dist_matrix[result_route[i - 1]][result_route[i]] + \
+                         dist_matrix[result_route[j]][result_route[j + 1]]
+
+                # 2-OPT 적용 후 거리
+                after = dist_matrix[result_route[i - 1]][result_route[j]] + \
+                        dist_matrix[result_route[i]][result_route[j + 1]]
+
+                # 개선되면 경로 반전
+                if after < before:
+                    result_route = (
+                        result_route[:i] +
+                        list(reversed(result_route[i:j + 1])) +
+                        result_route[j + 1:]
+                    )
                     result_cost += after - before
-                    result_route = result_route[:i] + list(reversed(result_route[i:j + 1])) + result_route[j + 1:]
                     improved = True
+
     if show:
-        print("2opt------------------------------")
-        print(f"cost : {result_cost}")
-        print(f"route : {result_route}")
-        print(f"소요시간 {time.time() - st}")
-        plot(nodes_coord, result_route, f'ObjVal : {int(result_cost)}')
+        print("✅ 2-OPT 최적화 결과")
+        print(f"총 비용: {result_cost}")
+        print(f"경로: {result_route}")
+        print(f"소요 시간: {time.time() - st:.4f}초")
+        if nodes_coord:
+            plot(nodes_coord, result_route, f'2-OPT Cost: {int(result_cost)}')
+
     return result_cost, result_route
 
 def plot(nodes_coord, route, title=''):
