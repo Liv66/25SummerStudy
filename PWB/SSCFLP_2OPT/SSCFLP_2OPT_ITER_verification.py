@@ -21,13 +21,14 @@ problem = vrplib.read_instance(vrp_path)
 coords_dict = problem["node_coord"]  # {1: (x1, y1), 2: (x2, y2), ...}
 depot = problem["depot"]
 
-n = 32
-m = 5
+n = len(problem["node_coord"])
+m = len(vrplib.read_solution(sol_path)["routes"])
+
 # depot 제외한 demands (첫 번째 요소 제외)
 demands_raw = problem.get("demand", [1] * n)[1:]  # depot 제외
 demands = demands_raw.tolist()
 # Vehicle capacity 추가 (VRP 문제에서 가져오기)
-vehicle_capacity = problem.get("capacity", 100)  # 기본값 100
+vehicle_capacity = problem["capacity"]  # 기본값 100
 capacities = [vehicle_capacity] * m  # 모든 facility가 같은 capacity를 가진다고 가정
 coords_dict = {i : tuple(problem["node_coord"][i]) for i in range(len(problem["node_coord"]))}
 depot_idx = 0
