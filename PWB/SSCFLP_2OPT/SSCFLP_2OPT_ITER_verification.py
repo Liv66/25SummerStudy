@@ -1,3 +1,4 @@
+import vrplib
 import random
 import matplotlib.pyplot as plt
 import gurobipy as gp
@@ -6,25 +7,34 @@ from gurobipy import GRB
 import numpy as np
 from scipy.stats import gaussian_kde
 
-from util_pure import two_opt, three_opt
+from util_pure import two_opt
 from collections import Counter
 
 
-# ---- 데이터 생성 ----
-n = 100
-m = 12
-area_x, area_y = 24000, 32000
-demand_mean, demand_std = 500, 200
-facility_capacity = 5000
+# 문제 불러오기
 
-depot_coord = (12000, 16000)
-customer_coords = [(random.uniform(0, area_x), random.uniform(0, area_y)) for _ in range(n)]
-#minx, miny = np.array(customer_coords).min(axis=0)
-#maxx, maxy = np.array(customer_coords).max(axis=0)
-#facility_coords = [(random.uniform(minx, maxx), random.uniform(miny, maxy)) for _ in range(m)]
-demands = [max(1, int(random.gauss(demand_mean, demand_std))) for _ in range(n)]
-capacities = [facility_capacity for _ in range(m)]
-print(demands)
+instance_name = "A-n32-k5"
+vrp_path = f"./vrp_instances/{instance_name}.vrp"
+sol_path = f"./vrp_instances/{instance_name}.sol"
+
+problem = vrplib.read_instance(vrp_path)
+coords_dict = problem["node_coord"]  # {1: (x1, y1), 2: (x2, y2), ...}
+depot = problem["depot"]
+
+n = 32
+m = 5
+# depot 제외한 demands (첫 번째 요소 제외)
+demands_raw = problem.get("demand", [1] * n)[1:]  # depot 제외
+demands = demands_raw.tolist()
+# Vehicle capacity 추가 (VRP 문제에서 가져오기)
+vehicle_capacity = problem.get("capacity", 100)  # 기본값 100
+capacities = [vehicle_capacity] * m  # 모든 facility가 같은 capacity를 가진다고 가정
+coords_dict = {i : tuple(problem["node_coord"][i]) for i in range(len(problem["node_coord"]))}
+depot_idx = 0
+x_depot, y_depot = coords_dict[depot_idx]
+depot_coord = (x_depot, y_depot)
+customer_ids = [n for n in range(1,n)]
+customer_coords = [coords_dict[k] for k in customer_ids]
 # ---- 거리행렬 생성 (Depot + Customers) ----
 def euclidean(p1, p2):
     q1 = np.array(p1).T
@@ -33,9 +43,12 @@ def euclidean(p1, p2):
 
 all_coords = [depot_coord] + customer_coords  # 0번이 depot, 1~n이 customer
 dist_matrix = [
-    [euclidean(all_coords[i], all_coords[j]) for j in range(n+1)]
-    for i in range(n+1)
+    [euclidean(all_coords[i], all_coords[j]) for j in range(n)]
+    for i in range(n)
 ]
+print(all_coords)
+print(dist_matrix)
+n = n-1
 
 start_time = time.time()
 
