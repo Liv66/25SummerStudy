@@ -13,7 +13,7 @@ from collections import Counter
 
 # 문제 불러오기
 
-instance_name = "A-n32-k5"
+instance_name = "X-n157-k13"
 vrp_path = f"./vrp_instances/{instance_name}.vrp"
 sol_path = f"./vrp_instances/{instance_name}.sol"
 
@@ -47,8 +47,7 @@ dist_matrix = [
     [euclidean(all_coords[i], all_coords[j]) for j in range(n)]
     for i in range(n)
 ]
-print(all_coords)
-print(dist_matrix)
+
 n = n-1
 
 start_time = time.time()
@@ -70,10 +69,11 @@ def SSCFLP():
         [euclidean(customer_coords[i], facility_coords[j]) for j in range(m)]
         for i in range(n)
     ]
+    time_limit = max(0.1, 59 + start_time - time.time())
     model = gp.Model("SSCFLP")
     model.setParam("OutputFlag", 0)
     model.setParam("LogToConsole", 0)
-    model.setParam("TimeLimit", 50)
+    model.setParam("TimeLimit", time_limit)
     x = model.addVars(n, m, vtype=GRB.BINARY, name="x")
     y = model.addVars(m, vtype=GRB.BINARY, name="y")
     model.setObjective(
@@ -163,6 +163,9 @@ def save_solution(best_routes, best_cost, filename="output.sol"):
 
 save_solution(best_routes, best_cost, filename="output.sol")
 
+print(f"\n✅ 전체 실행 시간: {time.time() - start_time:.2f}초")
+
+
 # ======== 좌표 딕셔너리 구성 (depot=0, customer=1~n) =========
 coords_dict = {0: depot_coord}
 for i, c in enumerate(customer_coords, start=1):
@@ -190,7 +193,6 @@ def visualize_solution(coords_dict, routes, depot_idx):
 
 visualize_solution(coords_dict, best_routes, depot_idx=0)
 
-print(f"\n✅ 전체 실행 시간: {time.time() - start_time:.2f}초")
 
 # ======== 5. 해 검증 =========
 
