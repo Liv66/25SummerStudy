@@ -61,6 +61,31 @@ def two_opt(depot, nodes, dist_matrix, nodes_coord=None, show=False):
 
     return result_cost, result_route
 
+
+def two_opt_origin(depot, nodes, dist_matrix, nodes_coord, show=False):
+    improved = True
+    result_route = [i for i in nodes] + [depot]
+    st = time.time()
+    result_cost = sum(dist_matrix[result_route[i]][result_route[i + 1]] for i in range(len(nodes)))
+    while improved:
+        improved = False
+        for i in range(1, len(nodes) - 1):
+            for j in range(i + 1, len(nodes)):
+                # before : 기존 경로 / after : 변경된 부분
+                before = (dist_matrix[result_route[i - 1]][result_route[i]] + dist_matrix[result_route[j]][result_route[j + 1]])
+                after = (dist_matrix[result_route[i - 1]][result_route[j]] + dist_matrix[result_route[i]][result_route[j + 1]])
+                if after - before < 0:
+                    result_cost += after - before
+                    result_route = result_route[:i] + list(reversed(result_route[i:j + 1])) + result_route[j + 1:]
+                    improved = True
+    if show:
+        print("2opt------------------------------")
+        print(f"cost : {result_cost}")
+        print(f"route : {result_route}")
+        print(f"소요시간 {time.time() - st}")
+        plot(nodes_coord, result_route, f'ObjVal : {int(result_cost)}')
+    return result_cost, result_route
+
 def plot(nodes_coord, route, title=''):
     points_x = [nodes_coord[x][0] for x in route]
     points_y = [nodes_coord[x][1] for x in route]

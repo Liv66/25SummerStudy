@@ -13,14 +13,14 @@ from collections import Counter
 
 # 문제 불러오기
 
-instance_name = "X-n157-k13"
+instance_name = "A-n32-k5"
 vrp_path = f"./vrp_instances/{instance_name}.vrp"
 sol_path = f"./vrp_instances/{instance_name}.sol"
 
 problem = vrplib.read_instance(vrp_path)
 coords_dict = problem["node_coord"]  # {1: (x1, y1), 2: (x2, y2), ...}
 depot = problem["depot"]
-
+print(coords_dict)
 n = len(problem["node_coord"])
 m = len(vrplib.read_solution(sol_path)["routes"])
 
@@ -35,6 +35,7 @@ depot_idx = 0
 x_depot, y_depot = coords_dict[depot_idx]
 depot_coord = (x_depot, y_depot)
 customer_ids = [n for n in range(1,n)]
+print(capacities)
 customer_coords = [coords_dict[k] for k in customer_ids]
 # ---- 거리행렬 생성 (Depot + Customers) ----
 def euclidean(p1, p2):
@@ -47,7 +48,6 @@ dist_matrix = [
     [euclidean(all_coords[i], all_coords[j]) for j in range(n)]
     for i in range(n)
 ]
-
 n = n-1
 
 start_time = time.time()
@@ -69,6 +69,7 @@ def SSCFLP():
         [euclidean(customer_coords[i], facility_coords[j]) for j in range(m)]
         for i in range(n)
     ]
+
     time_limit = max(0.1, 59 + start_time - time.time())
     model = gp.Model("SSCFLP")
     model.setParam("OutputFlag", 0)
@@ -100,7 +101,7 @@ def SSCFLP():
     return facility_coords, assigned_customers
 
 
-def TSP_result(show=False):
+def TSP_result(assigned_customers, show=False):
     total_cost = 0
     routes = []
 
@@ -125,30 +126,36 @@ def TSP_result(show=False):
 
 
 # ---- facility별 TSP (depot 포함) 반복 최적화 및 최적 결과 저장 ----
-best_cost = float('inf')
-best_facility_coords = None
-best_assigned_customers = None
-best_routes = None
-time_limit = 59
-i = 0
-while True:
-    facility_coords, assigned_customers = SSCFLP()
-    total_cost, routes = TSP_result()
+def Iteration_SSCFLP_2OPT(show=False):
+    best_cost = float('inf')
+#    best_facility_coords = None
+#    best_assigned_customers = None
+    best_routes = None
+    time_limit = 59
+    i = 0
+    while True:
+        facility_coords, assigned_customers = SSCFLP()
+        total_cost, routes = TSP_result(assigned_customers)
 
-    if total_cost < best_cost:
-        print(f"✅ Improved: {best_cost:.2f} → {total_cost:.2f}")
-        best_cost = total_cost
-        best_facility_coords = facility_coords
-        best_assigned_customers = assigned_customers
-        best_routes = routes
+        if total_cost < best_cost:
+            print(f"✅ Improved: {best_cost:.2f} → {total_cost:.2f}")
+            best_cost = total_cost
+#            best_facility_coords = facility_coords
+#            best_assigned_customers = assigned_customers
+            best_routes = routes
 
-    if i % 100 == 0:
-        print(f"Iteration {i} (elapsed: {time.time() - start_time:.1f}s)")
+        if i % 100 == 0:
+            print(f"Iteration {i} (elapsed: {time.time() - start_time:.1f}s)")
 
-    i += 1
-    if time.time() - start_time > time_limit:
-        print(f"\n⏱️ Time limit of {time_limit} seconds reached after {i} iterations.")
-        break
+        i += 1
+        if time.time() - start_time > time_limit:
+            print(f"\n⏱️ Time limit of {time_limit} seconds reached after {i} iterations.")
+            break
+
+    return best_cost, best_routes
+
+if __name__ == "__main__":
+    best_cost, best_routes = Iteration_SSCFLP_2OPT(show=False)
 
 def save_solution(best_routes, best_cost, filename="output.sol"):
     with open(filename, "w") as f:
@@ -156,12 +163,13 @@ def save_solution(best_routes, best_cost, filename="output.sol"):
             if not route:
                 continue  # 빈 route는 생략
             # customer 인덱스는 이미 0-based라고 가정
-            route = route[1:-1]
+            route = route
             route_str = ' '.join(str(cust) for cust in route)
             f.write(f"Route #{idx+1}: {route_str}\n")
         f.write(f"Cost {best_cost}")
 
-save_solution(best_routes, best_cost, filename="output.sol")
+if __name__ == "__main__":
+    save_solution(best_routes, best_cost, filename="output.sol")
 
 print(f"\n✅ 전체 실행 시간: {time.time() - start_time:.2f}초")
 
@@ -191,7 +199,8 @@ def visualize_solution(coords_dict, routes, depot_idx):
     plt.axis('equal')
     plt.show()
 
-visualize_solution(coords_dict, best_routes, depot_idx=0)
+if __name__ == "__main__":
+    visualize_solution(coords_dict, best_routes, depot_idx=0)
 
 
 # ======== 5. 해 검증 =========
