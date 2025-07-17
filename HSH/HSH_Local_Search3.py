@@ -187,10 +187,10 @@ if __name__ == '__main__':
     from HSH_Instance import generate_instance
 
     instance = generate_instance(
-        num_nodes=50,
-        linehaul_ratio=0.66,
-        capacity=5000,
-        num_vehicles=6
+        num_nodes = 150,
+        linehaul_ratio = 0.66,
+        capacity = 15000,
+        num_vehicles = 12
     )
 
     # GRASP 초기 경로

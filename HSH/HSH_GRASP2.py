@@ -117,10 +117,10 @@ if __name__ == '__main__':
     from HSH_Instance import generate_instance
 
     instance = generate_instance(
-        num_nodes = 50,
+        num_nodes = 150,
         linehaul_ratio = 0.66,
-        capacity = 5000,
-        num_vehicles = 6
+        capacity = 15000,
+        num_vehicles = 12
     )
 
     routes = generate_grasp_routes(instance, alpha=0.3)

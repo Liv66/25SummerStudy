@@ -117,13 +117,13 @@ def run_set_partitioning(instance: Dict, pool: List[List[int]]):
 if __name__ == '__main__':
     start_time = time.time()
     instance = generate_instance(
-        num_nodes = 50,
+        num_nodes = 150,
         linehaul_ratio = 0.66,
-        capacity = 5000,
+        capacity = 15000,
         num_vehicles = 6
     )
 
-    pool = run_pooling_loop(instance, duration_seconds = 29)
+    pool = run_pooling_loop(instance, duration_seconds = 25)
 
     print(f"\n[총 수집된 고유 route 개수] {len(pool)}개")
 
