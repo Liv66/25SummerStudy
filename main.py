@@ -36,7 +36,7 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
 
 def main():
-    N = 30
+    N = 220
     line_p = 0.7
     capa = 2000
     problem = f"instances/problem_{N}_{line_p}.json"
@@ -50,14 +50,6 @@ def main():
             problem_info = json.load(f)
     start = time.time()
     sol = KJH_main(problem_info)
-    print(sol)
-    for s in range(len(sol)):
-        if s == 0:
-            print(f"[{sol[s]},")
-        elif s == len(sol) - 1:
-            print(f"{sol[s]}] ")
-        else:
-            print(f"{sol[s]},")
 
     elapsed = time.time() - start
     time_limit = 60
