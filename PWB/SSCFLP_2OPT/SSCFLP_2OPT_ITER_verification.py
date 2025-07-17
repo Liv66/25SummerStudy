@@ -13,7 +13,11 @@ from collections import Counter
 
 # 문제 불러오기
 
+<<<<<<< HEAD
 instance_name = "X-n157-k13"
+=======
+instance_name = "A-n32-k5"
+>>>>>>> origin/wonbeen
 vrp_path = f"./vrp_instances/{instance_name}.vrp"
 sol_path = f"./vrp_instances/{instance_name}.sol"
 
@@ -21,14 +25,23 @@ problem = vrplib.read_instance(vrp_path)
 coords_dict = problem["node_coord"]  # {1: (x1, y1), 2: (x2, y2), ...}
 depot = problem["depot"]
 
+<<<<<<< HEAD
 n = len(problem["node_coord"])
 m = len(vrplib.read_solution(sol_path)["routes"])
 
+=======
+n = 32
+m = 5
+>>>>>>> origin/wonbeen
 # depot 제외한 demands (첫 번째 요소 제외)
 demands_raw = problem.get("demand", [1] * n)[1:]  # depot 제외
 demands = demands_raw.tolist()
 # Vehicle capacity 추가 (VRP 문제에서 가져오기)
+<<<<<<< HEAD
 vehicle_capacity = problem["capacity"]  # 기본값 100
+=======
+vehicle_capacity = problem.get("capacity", 100)  # 기본값 100
+>>>>>>> origin/wonbeen
 capacities = [vehicle_capacity] * m  # 모든 facility가 같은 capacity를 가진다고 가정
 coords_dict = {i : tuple(problem["node_coord"][i]) for i in range(len(problem["node_coord"]))}
 depot_idx = 0
@@ -47,7 +60,12 @@ dist_matrix = [
     [euclidean(all_coords[i], all_coords[j]) for j in range(n)]
     for i in range(n)
 ]
+<<<<<<< HEAD
 
+=======
+print(all_coords)
+print(dist_matrix)
+>>>>>>> origin/wonbeen
 n = n-1
 
 start_time = time.time()
@@ -69,11 +87,18 @@ def SSCFLP():
         [euclidean(customer_coords[i], facility_coords[j]) for j in range(m)]
         for i in range(n)
     ]
+<<<<<<< HEAD
     time_limit = max(0.1, 59 + start_time - time.time())
     model = gp.Model("SSCFLP")
     model.setParam("OutputFlag", 0)
     model.setParam("LogToConsole", 0)
     model.setParam("TimeLimit", time_limit)
+=======
+    model = gp.Model("SSCFLP")
+    model.setParam("OutputFlag", 0)
+    model.setParam("LogToConsole", 0)
+    model.setParam("TimeLimit", 50)
+>>>>>>> origin/wonbeen
     x = model.addVars(n, m, vtype=GRB.BINARY, name="x")
     y = model.addVars(m, vtype=GRB.BINARY, name="y")
     model.setObjective(
@@ -163,9 +188,12 @@ def save_solution(best_routes, best_cost, filename="output.sol"):
 
 save_solution(best_routes, best_cost, filename="output.sol")
 
+<<<<<<< HEAD
 print(f"\n✅ 전체 실행 시간: {time.time() - start_time:.2f}초")
 
 
+=======
+>>>>>>> origin/wonbeen
 # ======== 좌표 딕셔너리 구성 (depot=0, customer=1~n) =========
 coords_dict = {0: depot_coord}
 for i, c in enumerate(customer_coords, start=1):
@@ -193,6 +221,10 @@ def visualize_solution(coords_dict, routes, depot_idx):
 
 visualize_solution(coords_dict, best_routes, depot_idx=0)
 
+<<<<<<< HEAD
+=======
+print(f"\n✅ 전체 실행 시간: {time.time() - start_time:.2f}초")
+>>>>>>> origin/wonbeen
 
 # ======== 5. 해 검증 =========
 

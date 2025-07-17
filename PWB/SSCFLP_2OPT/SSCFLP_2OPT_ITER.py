@@ -24,7 +24,11 @@ customer_coords = [(random.uniform(0, area_x), random.uniform(0, area_y)) for _ 
 #facility_coords = [(random.uniform(minx, maxx), random.uniform(miny, maxy)) for _ in range(m)]
 demands = [max(1, int(random.gauss(demand_mean, demand_std))) for _ in range(n)]
 capacities = [facility_capacity for _ in range(m)]
+<<<<<<< HEAD
 
+=======
+print(demands)
+>>>>>>> origin/wonbeen
 # ---- 거리행렬 생성 (Depot + Customers) ----
 def euclidean(p1, p2):
     q1 = np.array(p1).T
@@ -57,10 +61,16 @@ def SSCFLP():
         for i in range(n)
     ]
     model = gp.Model("SSCFLP")
+<<<<<<< HEAD
     time_limit = max(0.1, 59 + start_time - time.time())
     model.setParam("OutputFlag", 0)
     model.setParam("LogToConsole", 0)
     model.setParam("TimeLimit", time_limit)
+=======
+    model.setParam("OutputFlag", 0)
+    model.setParam("LogToConsole", 0)
+    model.setParam("TimeLimit", 50)
+>>>>>>> origin/wonbeen
     x = model.addVars(n, m, vtype=GRB.BINARY, name="x")
     y = model.addVars(m, vtype=GRB.BINARY, name="y")
     model.setObjective(
@@ -150,9 +160,12 @@ def save_solution(best_routes, best_cost, filename="output.sol"):
 
 save_solution(best_routes, best_cost, filename="output.sol")
 
+<<<<<<< HEAD
 print(f"\n✅ 전체 실행 시간: {time.time() - start_time:.2f}초")
 
 
+=======
+>>>>>>> origin/wonbeen
 # ======== 좌표 딕셔너리 구성 (depot=0, customer=1~n) =========
 coords_dict = {0: depot_coord}
 for i, c in enumerate(customer_coords, start=1):
@@ -180,6 +193,10 @@ def visualize_solution(coords_dict, routes, depot_idx):
 
 visualize_solution(coords_dict, best_routes, depot_idx=0)
 
+<<<<<<< HEAD
+=======
+print(f"\n✅ 전체 실행 시간: {time.time() - start_time:.2f}초")
+>>>>>>> origin/wonbeen
 
 # ======== 5. 해 검증 =========
 
