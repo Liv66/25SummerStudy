@@ -1,0 +1,3 @@
+PROBLEM_FILE = tsp_instances/facility_5.tsp
+OUTPUT_TOUR_FILE = tours/facility_5.tour
+RUNS = 1
