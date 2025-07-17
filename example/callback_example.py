@@ -1,7 +1,7 @@
 import random
 from math import sqrt
-from example.callback_util import *
-from example.callback_heuristic import *
+from callback_util import *
+from callback_heuristic import *
 from util import plot_vrpb
 
 
