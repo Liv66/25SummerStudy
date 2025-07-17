@@ -13,11 +13,9 @@ from collections import Counter
 
 # 문제 불러오기
 
-<<<<<<< HEAD
 instance_name = "X-n157-k13"
-=======
 instance_name = "A-n32-k5"
->>>>>>> origin/wonbeen
+>>>>>>> origi
 vrp_path = f"./vrp_instances/{instance_name}.vrp"
 sol_path = f"./vrp_instances/{instance_name}.sol"
 
