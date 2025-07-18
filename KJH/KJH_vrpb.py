@@ -2,13 +2,18 @@ import random
 
 
 class Route:
-    def __init__(self):
-        self.hist = []
-        self.line_load = 0
-        self.back_load = 0
+    def __init__(self, hist=None, cost=0, line_load=0, back_load=0, line_idx=1):
+        if hist is None:
+            hist = []
+        self.hist = hist
+        self.cost = cost
+        self.line_load = line_load
+        self.back_load = back_load
+        self.line_idx = line_idx  # back이 시작하는 부분
         self.use = False
-        self.line_idx = 1
-        self.cost = 0
+
+    def __repr__(self):
+        return f"route : {self.hist}, cost : {self.cost}, line_idx : {self.line_idx}"
 
 
 class Construction:
@@ -215,8 +220,10 @@ class Construction:
         while True:
             constructionType = random.random() < 0.7
             if constructionType:
+                print("parallel")
                 foundSolution = self.parallel_strategy()
             else:
+                print("sequence")
                 foundSolution = self.sequential_strategy()
             if foundSolution:
                 break

@@ -36,9 +36,10 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
 
 def main():
-    N = 220
+    N = 100
     line_p = 0.7
     capa = 2000
+    time_limit = 40
     problem = f"instances/problem_{N}_{line_p}.json"
     try:
         with open(problem, "r", encoding='utf-8') as f:
@@ -49,12 +50,12 @@ def main():
         with open(problem, "r", encoding='utf-8') as f:
             problem_info = json.load(f)
     start = time.time()
-    sol = KJH_main(problem_info)
+    sol = KJH_main(problem_info, time_limit)
+    elapsed = round(time.time() - start, 2)
 
-    elapsed = time.time() - start
-    time_limit = 60
     obj = check_feasible(problem_info, sol, elapsed, time_limit)
-    plot_vrpb(problem_info, sol, f'obj : {obj}')
+    print(obj, elapsed)
+    plot_vrpb(problem_info, sol, f'obj : {obj} elapsed : {elapsed}')
 
 
 if __name__ == '__main__':

@@ -1,17 +1,26 @@
+import time
+
+from KJH.ILSRVND import *
 from KJH.KJH_vrpb import *
+from KJH.optimizer import solv_SC
 
 
-def KJH_main(problem_info):
+def KJH_main(problem_info, time_limit=60):
+    start = time.time()
+    N = problem_info['N']
     K = problem_info['K']
     node_type = problem_info['node_types']
     node_demand = problem_info['node_demands']
     capa = problem_info['capa']
     dist_mat = problem_info['dist_mat']
-
+    random_cost = [0] + [random.random() for _ in range(len(node_type) - 1)]
     c = Construction(K, node_type, node_demand, capa, dist_mat)
     c.construct()
-    sol = [route.hist for route in c.routes]
-    return sol
+    spool = SolPool(c.routes, capa, node_demand, node_type, random_cost)
+    ils_rvnd = ILS_RVND(K, dist_mat)
+    ils_rvnd.run(spool, start, time_limit)
+    print(f"ILS-RVND bset cost :{spool.best_cost}")
+    return solv_SC(spool, dist_mat, N, K)
 
 
 if __name__ == "__main__":
