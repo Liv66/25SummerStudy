@@ -47,9 +47,9 @@ def two_opt_wb(depot, nodes, dist_matrix, nodes_coord=None, show=False):
                 # 개선되면 경로 반전
                 if after < before:
                     result_route = (
-                        result_route[:i] +
-                        list(reversed(result_route[i:j + 1])) +
-                        result_route[j + 1:]
+                            result_route[:i] +
+                            list(reversed(result_route[i:j + 1])) +
+                            result_route[j + 1:]
                     )
                     result_cost += after - before
                     improved = True
@@ -63,6 +63,8 @@ def two_opt_wb(depot, nodes, dist_matrix, nodes_coord=None, show=False):
             plot(nodes_coord, result_route, f'2-OPT Cost: {int(result_cost)}')
 
     return result_cost, result_route
+
+
 def kde_out(n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix):
     capacities = [vehicle_capacity] * m
     depot_idx = 0
@@ -73,17 +75,18 @@ def kde_out(n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matri
     backhaul_coord = [coords_dict[i] for i in backhaul_ids]
 
     # ---- Customer 분포 주청 ----
-    kde_linehaul = gaussian_kde(np.array(linehaul_coord ).T)
-    mins_linehaul = np.min(linehaul_coord , axis=0)
-    maxs_linehaul = np.max(linehaul_coord , axis=0)
-    kde_backhaul = gaussian_kde(np.array(backhaul_coord ).T)
-    mins_backhaul = np.min(backhaul_coord , axis=0)
-    maxs_backhaul = np.max(backhaul_coord , axis=0)
-    return capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul,  kde_backhaul,  mins_backhaul, maxs_backhaul
-
-def run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul,  kde_backhaul,  mins_backhaul, maxs_backhaul, n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix):
+    kde_linehaul = gaussian_kde(np.array(linehaul_coord).T)
+    mins_linehaul = np.min(linehaul_coord, axis=0)
+    maxs_linehaul = np.max(linehaul_coord, axis=0)
+    kde_backhaul = gaussian_kde(np.array(backhaul_coord).T)
+    mins_backhaul = np.min(backhaul_coord, axis=0)
+    maxs_backhaul = np.max(backhaul_coord, axis=0)
+    return capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul, mins_backhaul, maxs_backhaul
 
 
+def run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord,
+                    kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul, mins_backhaul, maxs_backhaul, n, m,
+                    vehicle_capacity, demands, node_types, coords_dict, dist_matrix):
     def euclidean(p1, p2):
         return np.linalg.norm(np.array(p1) - np.array(p2))
 
@@ -125,8 +128,10 @@ def run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_c
                     assigned_customers[j].append(customer_idx[i])
         return facility_coords, assigned_customers
 
-    facility_linehaul, assigned_linehaul = SSCFLP(linehaul_coord, linehaul_ids, kde_linehaul, mins_linehaul, maxs_linehaul)
-    facility_backhaul, assigned_backhaul = SSCFLP(backhaul_coord, backhaul_ids, kde_backhaul, mins_backhaul, maxs_backhaul)
+    facility_linehaul, assigned_linehaul = SSCFLP(linehaul_coord, linehaul_ids, kde_linehaul, mins_linehaul,
+                                                  maxs_linehaul)
+    facility_backhaul, assigned_backhaul = SSCFLP(backhaul_coord, backhaul_ids, kde_backhaul, mins_backhaul,
+                                                  maxs_backhaul)
 
     nonempty_linehaul_idx = [i for i, group in enumerate(assigned_linehaul) if group]
     nonempty_backhaul_idx = [j for j, group in enumerate(assigned_backhaul) if group]
@@ -161,7 +166,7 @@ def run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_c
         ]
         costs = []
         for case in cases:
-            cost = sum(dist_matrix[case[i]][case[i+1]] for i in range(len(case)-1))
+            cost = sum(dist_matrix[case[i]][case[i + 1]] for i in range(len(case) - 1))
             costs.append(cost)
         return cases[np.argmin(costs)]
 
@@ -179,12 +184,15 @@ def run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_c
 
     total_cost = sum(dist_matrix[r[i]][r[i + 1]] for r in best_result_route if r for i in range(len(r) - 1))
     return total_cost, best_result_route
-def plot_routes_with_node_types(routes, coords_dict, node_type, total_cost, match_pairs=None, line_routes=None, back_routes=None):
+
+
+def plot_routes_with_node_types(routes, coords_dict, node_type, total_cost, match_pairs=None, line_routes=None,
+                                back_routes=None):
     if isinstance(coords_dict, list):
         coords_dict = {i: coord for i, coord in enumerate(coords_dict)}
 
     plt.xlim(-1000, 1000)
-    plt.ylim(min(ys)*1.05, max(ys)*1.05)
+    plt.ylim(min(ys) * 1.05, max(ys) * 1.05)
 
     plt.figure(figsize=(12, 6))
     colors = matplotlib.colormaps.get_cmap("tab20")
@@ -192,13 +200,14 @@ def plot_routes_with_node_types(routes, coords_dict, node_type, total_cost, matc
     for idx, route in enumerate(routes):
         route_coords = [coords_dict[i] for i in route]
         xs, ys = zip(*route_coords)
-        plt.plot(xs, ys, linestyle='-', color=colors(idx % 20), linewidth=2, alpha=0.9, label=f"Route {idx+1}")
+        plt.plot(xs, ys, linestyle='-', color=colors(idx % 20), linewidth=2, alpha=0.9, label=f"Route {idx + 1}")
 
     if match_pairs and line_routes and back_routes:
         for l_idx, b_idx in match_pairs:
             l_end = coords_dict[line_routes[l_idx][-2]]
             b_start = coords_dict[back_routes[b_idx][1]]
-            plt.plot([l_end[0], b_start[0]], [l_end[1], b_start[1]], color='black', linewidth=2, linestyle='--', alpha=0.8)
+            plt.plot([l_end[0], b_start[0]], [l_end[1], b_start[1]], color='black', linewidth=2, linestyle='--',
+                     alpha=0.8)
             # Draw backhaul to depot with dotted line
             b_tail = coords_dict[back_routes[b_idx][-2]]
             depot = coords_dict[0]
@@ -213,27 +222,34 @@ def plot_routes_with_node_types(routes, coords_dict, node_type, total_cost, matc
         elif node_t == 2:
             plt.plot(x, y, 'r^', markersize=10, label='Backhaul' if i == 2 else "")
 
-
     plt.title(f"PWB (Total cost: {total_cost})")
     plt.axis("equal")
     plt.grid(True)
     plt.legend(fontsize=8, loc="upper right", bbox_to_anchor=(1.25, 1))
     plt.tight_layout()
     plt.show()
+
+
 # ---- facility별 TSP (depot 포함) 반복 최적화 및 최적 결과 저장 ----
-def Iteration_VRPB(time_limit, start_time, capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul,  kde_backhaul,  mins_backhaul, maxs_backhaul, n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix, show=False):
+def Iteration_VRPB(time_limit, start_time, capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord,
+                   backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul,
+                   mins_backhaul, maxs_backhaul, n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix,
+                   show=False):
     best_cost = float('inf')
-#    best_facility_coords = None
-#    best_assigned_customers = None
+    #    best_facility_coords = None
+    #    best_assigned_customers = None
     best_routes = None
 
     while True:
-        total_cost, routes = run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul,  kde_backhaul,  mins_backhaul, maxs_backhaul, n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix)
+        total_cost, routes = run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord,
+                                             backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul,
+                                             kde_backhaul, mins_backhaul, maxs_backhaul, n, m, vehicle_capacity,
+                                             demands, node_types, coords_dict, dist_matrix)
         if total_cost < best_cost:
             print(f"✅ Improved: {best_cost:.2f} → {total_cost:.2f}")
             best_cost = total_cost
-#            best_facility_coords = facility_coords
-#            best_assigned_customers = assigned_customers
+            #            best_facility_coords = facility_coords
+            #            best_assigned_customers = assigned_customers
             best_routes = routes
         # i = 0
         # if i % 100 == 0:
@@ -241,7 +257,7 @@ def Iteration_VRPB(time_limit, start_time, capacities, depot_idx, depot_coord, l
         # i += 1
 
         if time.time() - start_time > time_limit:
-        #    print(f"\n⏱️ Time limit of {time_limit} seconds reached after {i} iterations.")
+            #    print(f"\n⏱️ Time limit of {time_limit} seconds reached after {i} iterations.")
             break
 
     return best_cost, best_routes
@@ -271,21 +287,23 @@ if __name__ == "__main__":
     start_time = time.time()
 
     # ---- Customer 분포 주청 ----
-    kde_linehaul = gaussian_kde(np.array(linehaul_coord ).T)
-    mins_linehaul = np.min(linehaul_coord , axis=0)
-    maxs_linehaul = np.max(linehaul_coord , axis=0)
-    kde_backhaul = gaussian_kde(np.array(backhaul_coord ).T)
-    mins_backhaul = np.min(backhaul_coord , axis=0)
-    maxs_backhaul = np.max(backhaul_coord , axis=0)
+    kde_linehaul = gaussian_kde(np.array(linehaul_coord).T)
+    mins_linehaul = np.min(linehaul_coord, axis=0)
+    maxs_linehaul = np.max(linehaul_coord, axis=0)
+    kde_backhaul = gaussian_kde(np.array(backhaul_coord).T)
+    mins_backhaul = np.min(backhaul_coord, axis=0)
+    maxs_backhaul = np.max(backhaul_coord, axis=0)
 
 if __name__ == "__main__":
     start_time = time.time()
-    best_cost, best_routes = Iteration_VRPB(start_time, capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul,  kde_backhaul,  mins_backhaul, maxs_backhaul, n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix, show=False)
+    best_cost, best_routes = Iteration_VRPB(start_time, capacities, depot_idx, depot_coord, linehaul_ids,
+                                            linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul,
+                                            maxs_linehaul, kde_backhaul, mins_backhaul, maxs_backhaul, n, m,
+                                            vehicle_capacity, demands, node_types, coords_dict, dist_matrix, show=False)
     print(f"\n✅ 전체 실행 시간: {time.time() - start_time:.2f}초")
     print(best_cost)
     print(best_routes)
     plot_routes_with_node_types(best_routes, coords_dict, node_types)
-
 
 
 def check_feasible_wb(problem_info, sol, elapsed, timelimit):
@@ -364,6 +382,24 @@ def check_feasible_wb(problem_info, sol, elapsed, timelimit):
     return total_cost
 
 
+def plot_vrpb_wb(problem_info, best_result_route=[], title=''):
+    nodes_coord = problem_info['node_coords']
+    nodes_type = problem_info['node_types']
+    for i in range(len(nodes_type)):
+        if nodes_type[i] == 0:
+            plt.scatter(nodes_coord[i][0], nodes_coord[i][1], s=150, marker='s', color='black')
+        elif nodes_type[i] == 1:
+            plt.scatter(nodes_coord[i][0], nodes_coord[i][1], s=35, color='blue')
+        else:
+            plt.scatter(nodes_coord[i][0], nodes_coord[i][1], s=35, marker='^', color='red')
 
-
-
+    for route in best_result_route:
+        points_x = [nodes_coord[x][0] for x in route]
+        points_y = [nodes_coord[x][1] for x in route]
+        # plt.scatter(points_x, points_y)
+        plt.plot([points_x[i] for i in range(len(route))], [points_y[i] for i in range(len(route))], linestyle='-',
+                 label='Line', )
+    plt.title(title)
+    plt.xticks([])  # x축 눈금 없애기
+    plt.yticks([])  # y축 눈금 없애기
+    plt.show()

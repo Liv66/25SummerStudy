@@ -4,14 +4,9 @@ from KJH.ILSRVND import *
 from KJH.KJH_vrpb import *
 from KJH.optimizer import solv_SC
 
-<<<<<<< HEAD
-def KJH_main(problem_info):
-=======
-
-def KJH_main(problem_info, time_limit=60):
+def KJH_run(problem_info, time_limit=60):
     start = time.time()
     N = problem_info['N']
->>>>>>> KJH
     K = problem_info['K']
     node_type = problem_info['node_types']
     node_demand = problem_info['node_demands']
@@ -28,5 +23,5 @@ def KJH_main(problem_info, time_limit=60):
 
 
 if __name__ == "__main__":
-    KJH_main()
+    KJH_run()
 

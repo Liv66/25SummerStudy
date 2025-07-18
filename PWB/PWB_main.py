@@ -1,10 +1,10 @@
 from PWB.PWB_vrpb import *
 
-instance_path = "../instances/problem_30_0.7.json"  # 경로는 본인 위치에 맞게 조정!
-with open(instance_path, "r") as f:
-    problem_info = json.load(f)
+# instance_path = "../instances/problem_30_0.7.json"  # 경로는 본인 위치에 맞게 조정!
+# with open(instance_path, "r") as f:
+#     problem_info = json.load(f)
 
-def PWB_main(problem_info):
+def PWB_run(problem_info):
     n = problem_info["N"]
     m = problem_info["K"]
     vehicle_capacity = problem_info["capa"]
@@ -24,7 +24,7 @@ def PWB_main(problem_info):
 if __name__ == "__main__":
     time_limit = 60
     start_time = time.time()
-    sol = PWB_main(problem_info)
-    elapsed_time = time.time() - start_time
-    total_cost = check_feasible_wb(problem_info, sol, elapsed_time, time_limit)
-    plot_routes_with_node_types(sol, problem_info["node_coords"], problem_info["node_types"], total_cost, match_pairs=None, line_routes=None, back_routes=None)
+    # sol = PWB_run(problem_info)
+    # elapsed_time = time.time() - start_time
+    # total_cost = check_feasible_wb(problem_info, sol, elapsed_time, time_limit)
+    # plot_routes_with_node_types(sol, problem_info["node_coords"], problem_info["node_types"], total_cost, match_pairs=None, line_routes=None, back_routes=None)
