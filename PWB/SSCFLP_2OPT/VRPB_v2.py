@@ -218,7 +218,7 @@ from collections import Counter
 
 
 # 예: instances 폴더 아래 problem_20_0.7.json 읽기
-instance_path = "../../instances/problem_20_0.7.json"  # 경로는 본인 위치에 맞게 조정!
+instance_path = "../../instances/problem_30_0.7.json"  # 경로는 본인 위치에 맞게 조정!
 
 with open(instance_path, "r") as f:
     data = json.load(f)
@@ -250,7 +250,7 @@ def Iteration_VRPB(show=False):
 #    best_facility_coords = None
 #    best_assigned_customers = None
     best_routes = None
-    time_limit = 5
+    time_limit = 50
     i = 0
     while True:
         total_cost, routes = run_sscflp_vrpb(n,m,vehicle_capacity, demands, node_types, coords_dict, dist_matrix)

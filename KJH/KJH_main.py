@@ -1,6 +1,5 @@
 from KJH.KJH_vrpb import *
 
-
 def KJH_main(problem_info):
     K = problem_info['K']
     node_type = problem_info['node_types']
@@ -16,3 +15,4 @@ def KJH_main(problem_info):
 
 if __name__ == "__main__":
     KJH_main()
+
