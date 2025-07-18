@@ -5,17 +5,35 @@ from gurobipy import GRB
 import numpy as np
 
 # 1. Data Generation
-n = 300
-m = 40
-area_x, area_y = 24000, 32000
-demand_mean, demand_std = 500, 200
-facility_capacity = 5000
+np.random.seed(42)
 
-depot_coord = (12000, 16000)
-customer_coords = [(random.uniform(0, area_x), random.uniform(0, area_y)) for _ in range(n)]
-facility_coords = [(random.uniform(0, area_x), random.uniform(0, area_y)) for _ in range(m)]
-demands = [max(1, int(random.gauss(demand_mean, demand_std))) for _ in range(n)]
+n = 30
+m = 4
+x = np.random.uniform(0, 100, n)
+y = np.random.uniform(0, 100, n)
+xy = np.vstack([x, y])  # shape: (2, 30)
+u = np.random.uniform(0, 100, n)
+v = np.random.uniform(0, 100, n)
+uv = np.vstack([u, v])  # shape: (2, 30)
+
+facility_capacity = 5000
+depot_coord = (50, 50)
+customer_coords = list(zip(xy[0], xy[1]))
+facility_coords = list(zip(uv[0], uv[1]))
+demands = [random.uniform(100, 600) for _ in range(n)]
 capacities = [facility_capacity for _ in range(m)]
+area_x, area_y = 100, 100
+
+# n = 300
+# m = 40
+# area_x, area_y = 24000, 32000
+# demand_mean, demand_std = 500, 200
+#  facility_capacity = 5000
+# depot_coord = (12000, 16000)
+# customer_coords = [(random.uniform(0, area_x), random.uniform(0, area_y)) for _ in range(n)]
+# facility_coords = [(random.uniform(0, area_x), random.uniform(0, area_y)) for _ in range(m)]
+# demands = [max(1, int(random.gauss(demand_mean, demand_std))) for _ in range(n)]
+# capacities = [facility_capacity for _ in range(m)]
 
 # 2. Cost Matrix
 def euclidean(p1, p2):
@@ -62,7 +80,7 @@ def save_solution(model, x_vars, y_vars, filename="solution.sol"):
 save_solution(model, x, y)
 
 # 5. Visualization
-fig, ax = plt.subplots(figsize=(8, 11))
+fig, ax = plt.subplots(figsize=(6, 6))
 fac_colors = ["blue" if y[j].X > 0.5 else "gray" for j in range(m)]
 for j in range(m):
     ax.scatter(*facility_coords[j], marker='^', c=fac_colors[j], s=140, label="Facility" if j==0 else "")

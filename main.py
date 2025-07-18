@@ -59,7 +59,7 @@ def main():
         with open(problem, "r", encoding='utf-8') as f:
             problem_info = json.load(f)
 
-    func_list = [KJH_run]
+    func_list = [PWB_run, KJH_run]
     for fu in func_list:
         start = time.time()
         sol = fu(problem_info)

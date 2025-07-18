@@ -239,26 +239,25 @@ def Iteration_VRPB(time_limit, start_time, capacities, depot_idx, depot_coord, l
     #    best_facility_coords = None
     #    best_assigned_customers = None
     best_routes = None
-
+    # i = 0
     while True:
         total_cost, routes = run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord,
                                              backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul,
                                              kde_backhaul, mins_backhaul, maxs_backhaul, n, m, vehicle_capacity,
                                              demands, node_types, coords_dict, dist_matrix)
         if total_cost < best_cost:
-            print(f"✅ Improved: {best_cost:.2f} → {total_cost:.2f}")
+            print(f"✅ Improved: {best_cost:.2f} → {total_cost} ({time.time() - start_time:.2f}s)")
             best_cost = total_cost
             #            best_facility_coords = facility_coords
             #            best_assigned_customers = assigned_customers
             best_routes = routes
-        # i = 0
         # if i % 100 == 0:
         #     print(f"Iteration {i} (elapsed: {time.time() - start_time:.1f}s)")
         # i += 1
 
         if time.time() - start_time > time_limit:
-            #    print(f"\n⏱️ Time limit of {time_limit} seconds reached after {i} iterations.")
-            break
+               # print(f"\n⏱️ Time limit of {time_limit} seconds reached after {i} iterations.")
+               break
 
     return best_cost, best_routes
 

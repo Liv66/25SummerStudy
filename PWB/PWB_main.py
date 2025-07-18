@@ -1,8 +1,5 @@
 from PWB.PWB_vrpb import *
 
-# instance_path = "../instances/problem_30_0.7.json"  # 경로는 본인 위치에 맞게 조정!
-# with open(instance_path, "r") as f:
-#     problem_info = json.load(f)
 
 def PWB_run(problem_info):
     n = problem_info["N"]
@@ -22,9 +19,12 @@ def PWB_run(problem_info):
     return sol
 
 if __name__ == "__main__":
+    instance_path = "../instances/problem_100_0.7.json"  # 경로는 본인 위치에 맞게 조정!
+    with open(instance_path, "r") as f:
+        problem_info = json.load(f)
     time_limit = 60
     start_time = time.time()
-    # sol = PWB_run(problem_info)
-    # elapsed_time = time.time() - start_time
-    # total_cost = check_feasible_wb(problem_info, sol, elapsed_time, time_limit)
-    # plot_routes_with_node_types(sol, problem_info["node_coords"], problem_info["node_types"], total_cost, match_pairs=None, line_routes=None, back_routes=None)
+    sol = PWB_run(problem_info)
+    elapsed_time = time.time() - start_time
+    total_cost = check_feasible_wb(problem_info, sol, elapsed_time, time_limit)
+    plot_vrpb_wb(problem_info, sol, title=f'Obj: {total_cost}')
