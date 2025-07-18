@@ -105,21 +105,3 @@ for idx, route in enumerate(routes):
     if line_load > vehicle_capacity or back_load > vehicle_capacity:
         print(f"  차량 {idx+1}: line {line_load}, back {back_load}, route: {pure}")
 
-
-# --- dist_mat 불러오기 ---
-dist_mat = data["dist_mat"]
-
-# --- 경로 거리 계산 함수 ---
-def route_length(route, dist_mat):
-    return sum(dist_mat[route[i]][route[i+1]] for i in range(len(route)-1))
-
-# --- output.sol의 모든 경로 실제 거리 계산 ---
-total_length = 0
-print("\n===== 차량별 경로 및 운송 거리(해답 검증) =====")
-for idx, route in enumerate(routes):
-    if not route:
-        continue
-    length = route_length(route, dist_mat)
-    total_length += length
-    print(f"차량 {idx+1}: 거리 {length:.2f}  경로: {route}")
-print(f"\n총 최적화 비용(총 운송 거리): {total_length:.2f}")
