@@ -616,10 +616,11 @@ class ILS_RVND:
 
     def perturbation(self, spool, pert_min, pert_max):
         r = random.randint(pert_min, pert_max)
+        len_sol = len(spool.current_sol)
         for i in range(r):
             outer_flag = True
             while outer_flag:
-                a, b = random.sample(range(self.K), 2)
+                a, b = random.sample(len_sol, 2)
                 swap1_route, swap2_route = spool.current_sol[a], spool.current_sol[b]
                 for x in range(1, swap1_route.line_idx):
                     inner_flag = True
