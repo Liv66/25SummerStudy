@@ -96,8 +96,10 @@ class ILS_RVND:
     def shift(self, spool):
         improved = False
         current_sol = spool.current_sol
-        for i in range(self.K):
-            for j in range(self.K):
+        len_sol = len(current_sol)
+
+        for i in range(len_sol):
+            for j in range(len_sol):
                 if i == j or self.shift_status[i, j] != 0:
                     continue
 
@@ -171,8 +173,9 @@ class ILS_RVND:
     def swap11(self, spool):
         improved = False
         current_sol = spool.current_sol
-        for i in range(self.K):
-            for j in range(i + 1, self.K):
+        len_sol = len(current_sol)
+        for i in range(len_sol):
+            for j in range(i + 1, len_sol):
                 if self.swap11_status[i, j] != 0:
                     continue
 
@@ -262,8 +265,9 @@ class ILS_RVND:
     def swap21(self, spool):
         improved = False
         current_sol = spool.current_sol
-        for i in range(self.K):
-            for j in range(self.K):
+        len_sol = len(current_sol)
+        for i in range(len_sol):
+            for j in range(len_sol):
                 if i == j or self.swap21_status[i, j] != 0:
                     continue
                 swap1_route = current_sol[i]
@@ -363,8 +367,9 @@ class ILS_RVND:
     def swap22(self, spool):
         improved = False
         current_sol = spool.current_sol
-        for i in range(self.K):
-            for j in range(i + 1, self.K):
+        len_sol = len(current_sol)
+        for i in range(len_sol):
+            for j in range(i + 1, len_sol):
                 if self.swap22_status[i, j] != 0:
                     continue
                 swap1_route = current_sol[i]
@@ -590,12 +595,13 @@ class ILS_RVND:
         random.shuffle(intra_nb)
 
         i = 0
+        len_sol = len(spool.current_sol)
         while i < len(inter_nb):
             if inter_nb[i](spool):
                 i = 0
             else:
                 i += 1
-            for k in range(self.K):
+            for k in range(len_sol):
                 if self.improved_route[k]:
                     j = 0
                     while j < len(intra_nb):
