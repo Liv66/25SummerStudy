@@ -46,6 +46,7 @@ class SolPool:
         if route_hash in self.sol_hash:
             if cost < self.cost_hash[route_hash]:
                 self.cost_hash[route_hash] = cost
+                self.sol_hash[route_hash] = route.copy()
             return
         self.sol_hash[route_hash] = route.copy()
         self.pool.append(route_hash)
@@ -644,15 +645,16 @@ class ILS_RVND:
                         break
         spool.calculate_current_cost()
 
-    def run(self, N, spool, solv_SC, start, time_limit=60, Maxiter=200, log=False):
+    def run(self, N, spool, solv_SC, start, time_limit=60, Maxiter=2000, log=False):
         end_flag = False
-        pert_min, pert_max = int(N * 0.1), int(N * 0.25)
-        ub_min, up_max = int(N * 0.25), int(N * 0.45)
+        pert_min, pert_max = int(N * 0.1), int(N * 0.2)
+        ub_min, up_max = int(N * 0.2), int(N * 0.3)
         no_improve = 0
+        pert_iter = 0
         for i in range(Maxiter):
             if log:
                 print(f"ILS iter {i}")
-            MaxIterILS = 80
+            MaxIterILS = 50
             iterILS = 0
             while iterILS < MaxIterILS:
                 self.run_rvnd(spool)
@@ -685,9 +687,11 @@ class ILS_RVND:
                 spool.best_sol = copy.deepcopy(spool.current_best_sol)
             else:
                 no_improve += 1
-                if no_improve >= 10:
+                pert_iter += 1
+                if no_improve >= 10 and pert_iter <= 5:
                     pert_min = min(pert_min + 1, ub_min)
                     pert_max = min(pert_max + 1, up_max)
+                    pert_iter = 0
 
             if end_flag:
                 opt_result, obj = solv_SC(spool, self.dist_mat, N, self.K, log=True)
@@ -705,3 +709,19 @@ class ILS_RVND:
                     spool.best_sol = [spool.make_sol(route, spool.cost_hash[spool.get_hash(route)]) for route in
                                       opt_result]
                     spool.reset()
+
+                else:
+                    if no_improve > 20:
+                        spool.current_sol = copy.deepcopy(spool.best_sol)
+                        spool.current_cost = spool.best_cost
+                        self.perturbation(spool, 2, 5)
+                        self.run_rvnd(spool)
+                        spool.current_best_sol = copy.deepcopy(spool.current_sol)
+                        spool.current_best_cost = spool.current_cost
+                    elif no_improve > 40:
+                        spool.current_sol = copy.deepcopy(spool.best_sol)
+                        spool.current_cost = spool.best_cost
+                        self.perturbation(spool, 10, 20)
+                        self.run_rvnd(spool)
+                        spool.current_best_sol = copy.deepcopy(spool.current_sol)
+                        spool.current_best_cost = spool.current_cost
