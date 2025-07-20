@@ -1,7 +1,7 @@
 import json
 import random
 
-from KJH.KJH_main import KJH_main
+from KJH.KJH_main import KJH_run
 from util import *
 
 
@@ -39,7 +39,7 @@ def main():
     N = 100
     line_p = 0.7
     capa = 2000
-    time_limit = 40
+    time_limit = 60
     problem = f"instances/problem_{N}_{line_p}.json"
     try:
         with open(problem, "r", encoding='utf-8') as f:
@@ -50,7 +50,7 @@ def main():
         with open(problem, "r", encoding='utf-8') as f:
             problem_info = json.load(f)
     start = time.time()
-    sol = KJH_main(problem_info, time_limit)
+    sol = KJH_run(problem_info, time_limit)
     elapsed = round(time.time() - start, 2)
 
     obj = check_feasible(problem_info, sol, elapsed, time_limit)
