@@ -8,6 +8,7 @@ from scipy.stats import gaussian_kde
 from scipy.optimize import linear_sum_assignment
 import json
 import matplotlib
+from sympy.codegen.ast import continue_
 
 
 def two_opt_wb(depot, nodes, dist_matrix, nodes_coord=None, show=False):
@@ -84,13 +85,13 @@ def kde_out(n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matri
     return capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul, mins_backhaul, maxs_backhaul
 
 
-def run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord,
+def run_sscflp_vrpb(time_left, capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord,
                     kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul, mins_backhaul, maxs_backhaul, n, m,
                     vehicle_capacity, demands, node_types, coords_dict, dist_matrix):
     def euclidean(p1, p2):
         return np.linalg.norm(np.array(p1) - np.array(p2))
 
-    def SSCFLP(customer_coords, customer_idx, kde, mins, maxs):
+    def SSCFLP(time_left, customer_coords, customer_idx, kde, mins, maxs):
         nn = len(customer_coords)
         raw_samples = kde.resample(m).T
         clipped_samples = np.clip(raw_samples, mins, maxs)
@@ -98,7 +99,7 @@ def run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_c
 
         transport_cost = [[euclidean(customer_coords[i], facility_coords[j]) for j in range(m)] for i in range(nn)]
 
-        time_limit = max(0.1, 50)
+        time_limit = max(0.1, time_left)
         model = gp.Model("SSCFLP")
         model.setParam("OutputFlag", 0)
         model.setParam("TimeLimit", time_limit)
@@ -128,13 +129,20 @@ def run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_c
                     assigned_customers[j].append(customer_idx[i])
         return facility_coords, assigned_customers
 
-    facility_linehaul, assigned_linehaul = SSCFLP(linehaul_coord, linehaul_ids, kde_linehaul, mins_linehaul,
+    while True:
+        s = time.time()
+        facility_linehaul, assigned_linehaul = SSCFLP(time_left, linehaul_coord, linehaul_ids, kde_linehaul, mins_linehaul,
                                                   maxs_linehaul)
-    facility_backhaul, assigned_backhaul = SSCFLP(backhaul_coord, backhaul_ids, kde_backhaul, mins_backhaul,
+        time_left2 = s - time.time()
+        facility_backhaul, assigned_backhaul = SSCFLP(time_left2, backhaul_coord, backhaul_ids, kde_backhaul, mins_backhaul,
                                                   maxs_backhaul)
 
-    nonempty_linehaul_idx = [i for i, group in enumerate(assigned_linehaul) if group]
-    nonempty_backhaul_idx = [j for j, group in enumerate(assigned_backhaul) if group]
+        nonempty_linehaul_idx = [i for i, group in enumerate(assigned_linehaul) if group]
+        nonempty_backhaul_idx = [j for j, group in enumerate(assigned_backhaul) if group]
+        if len(nonempty_linehaul_idx) >= len(nonempty_backhaul_idx):
+            break
+        # else:
+        #     print("라인홀 적음")
 
     def closest_pair_cost(i, j):
         nodes_l = assigned_linehaul[i]
@@ -231,7 +239,7 @@ def plot_routes_with_node_types(routes, coords_dict, node_type, total_cost, matc
 
 
 # ---- facility별 TSP (depot 포함) 반복 최적화 및 최적 결과 저장 ----
-def Iteration_VRPB(time_limit, start_time, capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord,
+def Iteration_VRPB(problem_info, time_limit, start_time, capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord,
                    backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul,
                    mins_backhaul, maxs_backhaul, n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix,
                    show=False):
@@ -241,10 +249,15 @@ def Iteration_VRPB(time_limit, start_time, capacities, depot_idx, depot_coord, l
     best_routes = None
     # i = 0
     while True:
-        total_cost, routes = run_sscflp_vrpb(capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord,
+        time_left = time_limit - time.time()
+        total_cost, routes = run_sscflp_vrpb(time_left, capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord,
                                              backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul,
                                              kde_backhaul, mins_backhaul, maxs_backhaul, n, m, vehicle_capacity,
                                              demands, node_types, coords_dict, dist_matrix)
+
+        # if check_feasible_wb(problem_info, routes, 0, 1) == 0:
+        #     continue
+
         if total_cost < best_cost:
             print(f"✅ Improved: {best_cost:.2f} → {total_cost} ({time.time() - start_time:.2f}s)")
             best_cost = total_cost
