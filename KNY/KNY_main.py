@@ -1,13 +1,67 @@
+# ======================================================================
+#  KNY_VRPB.py  ―  기존 코드 + KJH JSON 어댑터 + 결과 포맷 역변환
+# ======================================================================
+
+import json
 import random
 import math
 import time
+from pathlib import Path
 
 from util import bin_packing, get_distance, plot_cvrp
 from KNY_constraint import is_solution_feasible  # 제약 검증 함수
 
+# ─────────────────────────────────────────────────────────────
+# 0) KJH JSON → 내부(KNY) 포맷 변환
+# ─────────────────────────────────────────────────────────────
+def convert_kjh_problem(problem_info: dict):
+    """
+    KJH JSON(dict) → KNY 내부 포맷
+    반환:
+      delivery_idx, pickup_idx, demands, capa,
+      dist_matrix, depot_idx, node_types_internal, all_coords
+    """
+    capa = problem_info["capa"]
+
+    coords_all   = problem_info["node_coords"]   # depot + 고객
+    demands_all  = problem_info["node_demands"]
+    types_all    = problem_info["node_types"]    # 0=depot,1,2
+
+    depot_coord  = coords_all[0]
+    cust_coords  = coords_all[1:]
+    cust_demands = demands_all[1:]
+    cust_types   = [1 if t == 1 else 0 for t in types_all[1:]]  # 1=linehaul,0=backhaul
+
+    delivery_idx = [i for i, t in enumerate(cust_types) if t == 1]
+    pickup_idx   = [i for i, t in enumerate(cust_types) if t == 0]
+
+    all_coords   = cust_coords + [depot_coord]   # depot을 마지막으로 이동
+    dist_matrix  = get_distance(all_coords)
+    depot_idx    = len(cust_coords)              # depot = 마지막 인덱스
+
+    return (delivery_idx, pickup_idx, cust_demands, capa,
+            dist_matrix, depot_idx, cust_types, all_coords)
+
+
+def load_kjh_json(path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        info = json.load(f)
+    return convert_kjh_problem(info)
 
 # ─────────────────────────────────────────────────────────────
-# Constraint-Aware Greedy Insertion (VRPB)
+# 0‑B) 내부 → KJH 포맷 변환 (출력용)
+# ─────────────────────────────────────────────────────────────
+def to_kjh_routes(routes, depot_idx):
+    """depot=N → depot=0, 고객 인덱스 +1"""
+    return [[0 if v == depot_idx else v + 1 for v in r] for r in routes]
+
+def to_kjh_types(node_types_internal):
+    """내부 1/0 → KJH 1/2, 맨 앞에 0(depot) 추가"""
+    return [0] + [1 if t == 1 else 2 for t in node_types_internal]
+
+
+# ─────────────────────────────────────────────────────────────
+# 1) Constraint-Aware Greedy Insertion (VRPB)  ―  (기존 그대로)
 # ─────────────────────────────────────────────────────────────
 def greedy_insertion_vrpb(
     delivery_idx: list[int],
@@ -16,60 +70,85 @@ def greedy_insertion_vrpb(
     capa: int,
     dist: list[list[float]],
     depot_idx: int,
-    node_types: list[int],  # 추가
+    node_types: list[int],
 ) -> list[list[int]]:
+    print("[INFO] Start greedy_insertion_vrpb()")
     unassigned_deliv = set(delivery_idx)
     unassigned_pick  = set(pickup_idx)
     routes: list[list[int]] = []
 
     # ① 배송 노드 먼저
     while unassigned_deliv:
+        print(f"[INFO] New vehicle for delivery. Remaining deliveries: {len(unassigned_deliv)}")
         route, load, cur = [depot_idx], 0, depot_idx
+        count = 0
         while unassigned_deliv:
+            count += 1
+            if count > 200:
+                print("[WARNING] Too many delivery attempts, breaking.")
+                break
             nxt = min(unassigned_deliv, key=lambda n: dist[cur][n])
             delta = -demands[nxt] if node_types[nxt] == 1 else demands[nxt]
             if load + delta > capa or load + delta < 0:
-                break
-            route.append(nxt); load += delta
-            cur = nxt; unassigned_deliv.remove(nxt)
+                continue
+            route.append(nxt)
+            load += delta
+            cur = nxt
+            unassigned_deliv.remove(nxt)
 
         # ② 같은 차량에서 회수 노드
+        count = 0
         while unassigned_pick:
+            count += 1
+            if count > 200:
+                print("[WARNING] Too many pickup attempts, breaking.")
+                break
             nxt = min(unassigned_pick, key=lambda n: dist[cur][n])
             delta = -demands[nxt] if node_types[nxt] == 1 else demands[nxt]
             if load + delta > capa or load + delta < 0:
                 break
-            route.append(nxt); load += delta
-            cur = nxt; unassigned_pick.remove(nxt)
+            route.append(nxt)
+            load += delta
+            cur = nxt
+            unassigned_pick.remove(nxt)
 
         route.append(depot_idx)
         routes.append(route)
 
     # ③ 남은 회수 노드
     while unassigned_pick:
+        print(f"[INFO] New vehicle for remaining pickups. Remaining pickups: {len(unassigned_pick)}")
         route, load, cur = [depot_idx], 0, depot_idx
+        count = 0
         while unassigned_pick:
+            count += 1
+            if count > 200:
+                print("[WARNING] Too many pickup attempts in residual phase, breaking.")
+                break
             nxt = min(unassigned_pick, key=lambda n: dist[cur][n])
             delta = -demands[nxt] if node_types[nxt] == 1 else demands[nxt]
             if load + delta > capa or load + delta < 0:
                 break
-            route.append(nxt); load += delta
-            cur = nxt; unassigned_pick.remove(nxt)
+            route.append(nxt)
+            load += delta
+            cur = nxt
+            unassigned_pick.remove(nxt)
         route.append(depot_idx)
         routes.append(route)
 
+    print("[INFO] Greedy insertion finished.")
     return routes
 
 
 # ─────────────────────────────────────────────────────────────
-# Utility: cost of one route
+# 2) Utility: cost of one route  ―  (기존 그대로)
 # ─────────────────────────────────────────────────────────────
 def route_cost(route: list[int], dist: list[list[float]]) -> float:
     return sum(dist[route[i]][route[i + 1]] for i in range(len(route) - 1))
 
 
 # ─────────────────────────────────────────────────────────────
-# Adaptive Large Neighborhood Search (VRPB)
+# 3) Adaptive Large Neighborhood Search (VRPB)  ―  (기존 그대로)
 # ─────────────────────────────────────────────────────────────
 def alns_vrpb(
     init_routes: list[list[int]],
@@ -81,6 +160,7 @@ def alns_vrpb(
     time_limit: float = 60.0,
     p_destroy: float = 0.3,
 ) -> tuple[list[list[int]], float]:
+    print("[INFO] Start ALNS")
     best_routes = [r[:] for r in init_routes]
     best_cost   = sum(route_cost(r, dist) for r in best_routes)
     cur_routes  = [r[:] for r in best_routes]
@@ -91,8 +171,9 @@ def alns_vrpb(
 
     while time.time() - start < time_limit:
         iteration += 1
+        if iteration % 10 == 0:
+            print(f"[INFO] Iteration {iteration}, best cost so far: {best_cost:.2f}")
 
-        # ── Destroy ──
         removed, new_routes = [], []
         for r in cur_routes:
             if random.random() < p_destroy and len(r) > 3:
@@ -105,24 +186,15 @@ def alns_vrpb(
             else:
                 new_routes.append(r)
 
-        # ── Repair ──
         for n in removed:
             best_delta, best_pos, best_r = math.inf, None, None
             for r in new_routes:
-                # 순서 제약
                 if node_types[n] == 1 and any(node_types[v] == 0 for v in r[1:-1]):
                     continue
-                # 용량 제약
-                load = 0
-                for v in r:
-                    if v == depot_idx:
-                        continue
-                    load += -demands[v] if node_types[v] == 1 else demands[v]
-
+                load = sum(-demands[v] if node_types[v] == 1 else demands[v] for v in r if v != depot_idx)
                 change = -demands[n] if node_types[n] == 1 else demands[n]
                 if load + change > capa or load + change < 0:
                     continue
-                # 위치별 비용
                 for pos in range(1, len(r)):
                     delta = dist[r[pos - 1]][n] + dist[n][r[pos]] - dist[r[pos - 1]][r[pos]]
                     if delta < best_delta:
@@ -143,13 +215,15 @@ def alns_vrpb(
                 best_cost  = new_cost
                 best_routes = [r[:] for r in new_routes]
 
+    print("[INFO] ALNS finished.")
     return best_routes, best_cost
 
 
 # ─────────────────────────────────────────────────────────────
-# Main
+# 4) 기존 랜덤 인스턴스용 main()  ―  그대로 유지
 # ─────────────────────────────────────────────────────────────
 def main() -> None:
+    print("[INFO] Start main()")
     N, capa = 50, 5000
 
     nodes_coord = [(random.uniform(0, 24_000), random.uniform(0, 32_000)) for _ in range(N)]
@@ -173,16 +247,22 @@ def main() -> None:
     dist_matrix  = get_distance(all_coord)
     depot_idx    = N
 
+    print("[INFO] Calling greedy_insertion_vrpb()")
     init_routes = greedy_insertion_vrpb(
-        delivery_idx, pickup_idx, demands, capa, dist_matrix, depot_idx, node_types  # ← node_types 추가
+        delivery_idx, pickup_idx, demands, capa, dist_matrix, depot_idx, node_types
     )
+    print("[INFO] Initial solution constructed.")
+
     assert is_solution_feasible(init_routes, node_types, demands, capa, depot_idx), \
         "Initial solution infeasible!"
 
+    print("[INFO] Calling alns_vrpb()")
     best_routes, best_cost = alns_vrpb(
         init_routes, dist_matrix, node_types, demands, capa,
         depot_idx=depot_idx, time_limit=60,
     )
+    print("[INFO] ALNS optimization completed.")
+
     assert is_solution_feasible(best_routes, node_types, demands, capa, depot_idx), \
         "Final best solution infeasible!"
 
@@ -191,5 +271,40 @@ def main() -> None:
     plot_cvrp(all_coord, best_routes, f"VRPB obj: {best_cost:.1f}")
 
 
+# ─────────────────────────────────────────────────────────────
+# 5) JSON(KJH) 문제를 바로 돌리는 헬퍼
+# ─────────────────────────────────────────────────────────────
+def run_kjh_problem(problem_path):
+    (delivery_idx, pickup_idx, demands, capa,
+     dist, depot_idx, node_types, all_coords) = load_kjh_json(problem_path)
+
+    init_routes = greedy_insertion_vrpb(
+        delivery_idx, pickup_idx, demands, capa, dist, depot_idx, node_types
+    )
+    best_routes, best_cost = alns_vrpb(
+        init_routes, dist, node_types, demands, capa, depot_idx, time_limit=60
+    )
+
+    # 내부 → KJH 포맷 변환
+    routes_kjh     = to_kjh_routes(best_routes, depot_idx)
+    node_types_kjh = to_kjh_types(node_types)
+
+    # 출력 & (필요 시) KJH 쪽 검증
+    for k, r in enumerate(routes_kjh):
+        print(f"vehicle {k}: {r}")
+
+    # 예시: check_feasible(problem_info, routes_kjh, …) 호출하려면
+    # JSON을 다시 읽어서 problem_info 만들고 넘기면 됩니다.
+
+    # 그림은 내부 인덱스로 그리는 편이 편해요
+    plot_cvrp(all_coords, best_routes, f"VRPB obj: {best_cost:.1f}")
+
+# ─────────────────────────────────────────────────────────────
+# 6) 실행 엔트리
+# ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    main()
+    # 프로젝트 루트(25SummerStudy)
+    ROOT = Path(__file__).resolve().parents[1]
+    PROBLEM_JSON = ROOT / "instances" / "problem_220_0.7.json"
+
+    run_kjh_problem(PROBLEM_JSON)
