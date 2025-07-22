@@ -1,10 +1,11 @@
 import random
 import numpy
 from functools import reduce
+import math
+from OSM_util import get_distance, two_opt
 
 class ACO_VRPB:
-
-    def __init__(self, alpha=2, beta=5, sigma=3, ro=0.8, th=80, iterations=1000, ants=22):
+    def __init__(self, alpha=1, beta=5, sigma=3, ro=0.8, th=80, iterations=200, ants=22, q0=0.9):
         self.alpha = alpha
         self.beta = beta
         self.sigma = sigma
@@ -12,122 +13,129 @@ class ACO_VRPB:
         self.th = th
         self.iterations = iterations
         self.ants = ants
-        """
-        alpha Æä·Î¸ó ¿µÇâ·Â: Å¬¼ö·Ï ¸¹ÀÌ ´Ù´Ï´Â ±æÀ» ¼±ÅÃÇÒ È®·üÀÌ ³ô¾ÆÁü
-        beta °Å¸® ¿µÇâ·Â: Å¬¼ö·Ï °¡±î¿î ±æÀ» ¼±ÅÃÇÒ È®·üÀÌ ³ô¾ÆÁü 
-        sigma °æ·Î °­È­ÇÒ »óÀ§ °³¹ÌÀÇ ¼ö
-        ro = Æä·Î¸ó Áõ¹ß °è¼ö
-        th = Æä·Î¸ó ¾÷µ¥ÀÌÆ® °è»ê¿¡ »ç¿ëµÇ´Â Ãß°¡ º¯¼ö
-        iterations ¼¼´ë ¼ö: ¾Ë°í¸®Áò ¹İº¹ È½¼ö
-        ants °³¹Ì ¼ö    
-        """
+        self.q0 = q0
 
-    def initialize_aco_data(self, capa, nodes_coord, demands): # N, capa, nodes_coord, demands¸¦ Á÷Á¢ ÆÄ¶ó¹ÌÅÍ·Î ¹ŞÀ½
-        # ¼ö¿ä: ¾ç¼ö(+) linehaul, À½¼ö(-) backhaul
-        
-        # ³ëµå ID¸¦ Å°·Î ÇÏ´Â graph¿Í demand µñ¼Å³Ê¸® »ı¼º (0¹ø ³ëµå´Â Â÷°íÁö)
-        graph = {i: coord for i, coord in enumerate(nodes_coord)}   # nodes_coord ¸®½ºÆ®¸¦ ±×·¡ÇÁ·Î ¸¸µé¾îÁÜ
-        demand_dict = {i: d for i, d in enumerate(demands)} # ¼ö¿ä·®À» µñ¼Å³Ê¸®·Î ÀúÀå
-
-        # ¼ö¿ä¸¦ ±â¹İÀ¸·Î ³ëµå ºĞ·ù
+    def initialize_aco_data(self, capa, nodes_coord, demands):
+        graph = {i: coord for i, coord in enumerate(nodes_coord)}
+        demand_dict = {i: d for i, d in enumerate(demands)}
         all_nodes = list(graph.keys())
-        depot = 0   # 0¹ø ³ëµå¸¦ Â÷°íÁö·Î °¡Á¤
+        
+        linehaul_nodes = [node for node in all_nodes if demand_dict.get(node, 0) > 0]
+        backhaul_nodes = [node for node in all_nodes if demand_dict.get(node, 0) < 0]
 
-        linehaul_nodes = [node for node in all_nodes if demand_dict[node] > 0]
-        backhaul_nodes = [node for node in all_nodes if demand_dict[node] < 0]
-
-        print(f"Depot: {depot}")
+        print(f"Depot: 0")
         print(f"Linehaul nodes {len(linehaul_nodes)}: {linehaul_nodes}")
         print(f"Backhaul nodes {len(backhaul_nodes)}: {backhaul_nodes}")
 
-        # ¸ğµç ³ëµå °£ÀÇ °Å¸®(edges) °è»ê
-        edges = {(min(a,b), max(a,b)): numpy.sqrt((graph[a][0]-graph[b][0])**2 + (graph[a][1]-graph[b][1])**2) 
+        edges = {(min(a, b), max(a, b)): numpy.sqrt((graph[a][0] - graph[b][0])**2 + (graph[a][1] - graph[b][1])**2)
                  for a in all_nodes for b in all_nodes if a != b}
-
-        # Æä·Î¸ó ÃÊ±âÈ­
+        
         feromones = {k: 1.0 for k in edges.keys()}
-
-        # ºĞ·ùµÈ ³ëµå ¸®½ºÆ®¸¦ ¹İÈ¯
+        
         return linehaul_nodes, backhaul_nodes, edges, capa, demand_dict, feromones
-    
+
     def _calculate_probabilities(self, current_node, candidate_nodes, feromones, edges):
-        """ ÇöÀç ³ëµå¿¡¼­ ÈÄº¸ ³ëµå·Î ÀÌµ¿ÇÒ È®·ü °è»ê """
         probs = []
         for node in candidate_nodes:
-            # ¿¡·¯ ¹æÁö¸¦ À§ÇØ .get() »ç¿ë
             edge = (min(current_node, node), max(current_node, node))
             prob = (feromones.get(edge, 1.0) ** self.alpha) * \
                    ((1 / edges.get(edge, float('inf'))) ** self.beta)
             probs.append(prob)
-
+        
         sum_probs = numpy.sum(probs)
         if sum_probs == 0:
-            # ¸ğµç È®·üÀÌ 0ÀÌ¸é, ±Õµî È®·üÀ» ¹İÈ¯ÇÏ¿© ¸ØÃß´Â °ÍÀ» ¹æÁö
             return numpy.ones(len(candidate_nodes)) / len(candidate_nodes) if candidate_nodes else numpy.array([])
-
+        
         return numpy.array(probs) / sum_probs
 
-    def solutionOfOneAnt_VRPB(self, all_linehaul, all_backhaul, edges, capacityLimit, demand, feromones):
-        solution = list()
+    def solution_one_ant_VRPB(self, K, all_linehaul, all_backhaul, edges, capacityLimit, demand, feromones, nodes_coord):
+        """
+        K-vehicle ì œì•½ì„ ì§€í‚¤ëŠ” ì‚½ì… íœ´ë¦¬ìŠ¤í‹± ê¸°ë°˜ ê²½ë¡œ ìƒì„±
+        """
+        # 1. ì´ˆê¸°í™”: Kê°œì˜ ì°¨ëŸ‰ ìƒíƒœì™€ ë°©ë¬¸í•  ê³ ê° ëª©ë¡ ì¤€ë¹„
+        clusters = [[] for _ in range(K)]
+        linehaul_loads = [0] * K
+        backhaul_loads = [0] * K
+        last_nodes = [0] * K  # ê° ì°¨ëŸ‰ì˜ ë§ˆì§€ë§‰ ìœ„ì¹˜, ì´ˆê¸°ê°’ì€ Depot(0)
 
-        # ¹æ¹®ÇØ¾ß ÇÒ ³ëµå ¸ñ·Ï º¹»ç
-        unvisited_linehaul = all_linehaul.copy()
-        unvisited_backhaul = all_backhaul.copy()
+        unvisited_customers = all_linehaul + all_backhaul
+        random.shuffle(unvisited_customers) # ê°œë¯¸ë§ˆë‹¤ ë‹¤ë¥¸ í•´ë¥¼ ì°¾ê¸° ìœ„í•´ ìˆœì„œë¥¼ ì„ìŒ
 
-        while unvisited_linehaul or unvisited_backhaul: # ¹æ¹®ÇÒ ³ëµå°¡ ³²¾ÆÀÖ´Â µ¿¾È ¹İº¹
+        # 2. ëª¨ë“  ê³ ê°ì„ KëŒ€ì˜ ì°¨ëŸ‰ ì¤‘ ê°€ì¥ ë¹„ìš©ì´ ì ì€ ê³³ì— ì‚½ì…
+        for customer in unvisited_customers:
+            best_vehicle_idx = -1
+            min_insertion_cost = float('inf')
+            is_linehaul = demand[customer] > 0
 
-            # ¹è¼Û(Linehaul) °æ·Î
-            path = []
-            current_linehaul_demand = 0
-
-            # Á¦¾àÁ¶°Ç6: °¢ °æ·Î¿¡´Â Àû¾îµµ 1°³ ÀÌ»óÀÇ ¹è¼Û ³ëµå°¡ ÀÖ¾î¾ß ÇÔ
-            if not unvisited_linehaul: break # ´õ ÀÌ»ó ¹è¼ÛÇÒ ³ëµå°¡ ¾øÀ¸¸é Á¾·á
-
-            # Ã¹ ¹è¼Û ³ëµå ¼±ÅÃ (·£´ı)
-            current_node = numpy.random.choice(unvisited_linehaul)
-
-            # °æ·Î ½ÃÀÛ
-            path.append(current_node)
-            current_linehaul_demand += demand[current_node]
-            unvisited_linehaul.remove(current_node)
-
-            # Ãß°¡ ¹è¼Û ³ëµå ¼±ÅÃ
-            while unvisited_linehaul:
-                # È®·ü °è»ê (¿ÀÁ÷ ¹Ì¹æ¹® ¹è¼Û ³ëµå¸¸À» ´ë»óÀ¸·Î)
-                probabilities = self._calculate_probabilities(current_node, unvisited_linehaul, feromones, edges)
-                next_node = numpy.random.choice(unvisited_linehaul, p=probabilities)
-
-                # ¿ë·® Á¦¾à Á¶°Ç (v) È®ÀÎ
-                if current_linehaul_demand + demand[next_node] <= capacityLimit:
-                    path.append(next_node)
-                    current_linehaul_demand += demand[next_node]
-                    unvisited_linehaul.remove(next_node)
-                    current_node = next_node
-                else:
-                    break # ¿ë·® ÃÊ°ú ½Ã ¹è¼Û ´Ü°è Á¾·á
-
-            # ¹İ¼Û(Backhaul) °æ·Î
-            current_backhaul_demand = 0
-
-            while unvisited_backhaul:
-                # È®·ü °è»ê (¹Ì¹æ¹® ¹İ¼Û ³ëµå ´ë»óÀ¸·Î, ÇöÀç À§Ä¡´Â ¸¶Áö¸· ¹è¼Û ³ëµå)
-                probabilities = self._calculate_probabilities(current_node, unvisited_backhaul, feromones, edges)
-                next_node = numpy.random.choice(unvisited_backhaul, p=probabilities)
-
-                # 5. ¿ë·® Á¦¾à Á¶°Ç È®ÀÎ (¹İ¼Û ¼ö¿ä´Â º¸Åë Àı´ë°ªÀ¸·Î °è»ê)
-                if current_backhaul_demand + abs(demand[next_node]) <= capacityLimit:
-                    path.append(next_node)
-                    current_backhaul_demand += abs(demand[next_node])
-                    unvisited_backhaul.remove(next_node)
-                    current_node = next_node
-                else:
-                    break # ¿ë·® ÃÊ°ú ½Ã ¹İ¼Û ´Ü°è Á¾·á
+            for i in range(K):
+                # ìš©ëŸ‰ ì œì•½ ì¡°ê±´ í™•ì¸
+                if is_linehaul:
+                    if linehaul_loads[i] + demand[customer] > capacityLimit:
+                        continue # ìš©ëŸ‰ ì´ˆê³¼
+                else: # ë°˜ì†¡
+                    if backhaul_loads[i] + abs(demand[customer]) > capacityLimit:
+                        continue # ìš©ëŸ‰ ì´ˆê³¼
                 
-            solution.append(path) # ¿Ï¼ºµÈ ÇÑ Â÷·®ÀÇ °æ·Î¸¦ ÀüÃ¼ ÇØ´ä¿¡ Ãß°¡
+                # ì‚½ì… ë¹„ìš© ê³„ì‚° (í˜„ì¬ ì°¨ëŸ‰ì˜ ë§ˆì§€ë§‰ ë…¸ë“œì—ì„œ ì´ ê³ ê°ê¹Œì§€ì˜ ê±°ë¦¬)
+                cost = edges.get((min(last_nodes[i], customer), max(last_nodes[i], customer)), float('inf'))
+
+                if cost < min_insertion_cost:
+                    min_insertion_cost = cost
+                    best_vehicle_idx = i
+            
+            # ê°€ì¥ ë¹„ìš©ì´ ì ì€ ì°¨ëŸ‰ì— ê³ ê° í• ë‹¹
+            if best_vehicle_idx != -1:
+                clusters[best_vehicle_idx].append(customer)
+                last_nodes[best_vehicle_idx] = customer # ì°¨ëŸ‰ì˜ ë§ˆì§€ë§‰ ìœ„ì¹˜ ì—…ë°ì´íŠ¸
+                if is_linehaul:
+                    linehaul_loads[best_vehicle_idx] += demand[customer]
+                else:
+                    backhaul_loads[best_vehicle_idx] += abs(demand[customer])
+            else:
+                # ëª¨ë“  ì°¨ëŸ‰ì´ ì´ ê³ ê°ì„ ë°›ì„ ìˆ˜ ì—†ëŠ” ê²½ìš° (ìš©ëŸ‰ ë“±), ì´ ê°œë¯¸ëŠ” ì‹¤íŒ¨
+                return []
+
+        # 3. Kê°œì˜ ê·¸ë£¹(í´ëŸ¬ìŠ¤í„°)ì´ ì™„ì„±ë¨. ì´ì œ ê° ê·¸ë£¹ ë‚´ì—ì„œ ê²½ë¡œ ìˆœì„œ ê²°ì •
+        solution = []
+        for k in range(K):
+            cluster_nodes = clusters[k]
+            if not cluster_nodes:
+                solution.append([])
+                continue
+            
+            # ë°°ì†¡/ë°˜ì†¡ ë…¸ë“œ ë¶„ë¦¬
+            linehaul_part = [node for node in cluster_nodes if demand[node] > 0]
+            backhaul_part = [node for node in cluster_nodes if demand[node] < 0]
+            
+            # ê° íŒŒíŠ¸ ë‚´ì—ì„œ ê²½ë¡œ ìƒì„± (ACO í™•ë¥  ê¸°ë°˜)
+            path = []
+            current_node = 0 # Depotì—ì„œ ì‹œì‘
+            while linehaul_part:
+                probabilities = self._calculate_probabilities(current_node, linehaul_part, feromones, edges)
+                next_node = numpy.random.choice(linehaul_part, p=probabilities)
+                path.append(next_node)
+                linehaul_part.remove(next_node)
+                current_node = next_node
+                
+            while backhaul_part:
+                probabilities = self._calculate_probabilities(current_node, backhaul_part, feromones, edges)
+                next_node = numpy.random.choice(backhaul_part, p=probabilities)
+                path.append(next_node)
+                backhaul_part.remove(next_node)
+                current_node = next_node
+                
+            solution.append(path)
 
         return solution
-    
-    def rateSolution(self, solution, edges):
+
+    def rate_solution(self, solution, K, edges, demand_dict):
+        if not solution or len(solution) != K:
+            return float('inf')
+
+        for path in solution:
+            if path and not any(demand_dict.get(node, 0) > 0 for node in path):
+                return float('inf')
+
         total_distance = 0
         depot = 0
         for path in solution:
@@ -138,60 +146,80 @@ class ACO_VRPB:
             total_distance += edges.get((min(current_node, depot), max(current_node, depot)), 0)
         return total_distance
 
-    def updateFeromone(self, feromones, solutions, bestSolution):
-        Lavg = reduce(lambda x, y: x + y, (i[1] for i in solutions)) / len(solutions)
+    def update_feromone(self, feromones, solutions, bestSolution):
+        valid_solutions = [s for s in solutions if s[1] != float('inf')]
+        if not valid_solutions:
+            feromones = {k: self.ro * v for (k, v) in feromones.items()}
+            return bestSolution, feromones
+
+        Lavg = sum(s[1] for s in valid_solutions) / len(valid_solutions)
         feromones = {k: (self.ro + self.th / Lavg) * v for (k, v) in feromones.items()}
-        solutions.sort(key=lambda x: x[1])
         
-        if bestSolution is None or solutions[0][1] < bestSolution[1]:
-            bestSolution = solutions[0]
+        valid_solutions.sort(key=lambda x: x[1])
+        
+        if bestSolution is None or bestSolution[1] == float('inf') or valid_solutions[0][1] < bestSolution[1]:
+            bestSolution = valid_solutions[0]
 
-        # ÃÖ°í ÇØ´ä °æ·Î¿¡ Æä·Î¸ó Ãß°¡
-        for path in bestSolution[0]:
-            current_node = 0
-            for node in path:
-                edge = (min(current_node, node), max(current_node, node))
-                if edge in feromones:
-                    feromones[edge] += self.sigma / bestSolution[1]
-                current_node = node
-            edge = (min(current_node, 0), max(current_node, 0))
-            if edge in feromones:
-                feromones[edge] += self.sigma / bestSolution[1]
-
+        if bestSolution and bestSolution[1] != float('inf'):
+            depot = 0
+            for path in bestSolution[0]:
+                current_node = depot
+                for node in path:
+                    edge = (min(current_node, node), max(current_node, node))
+                    if edge in feromones: feromones[edge] += self.sigma / bestSolution[1]
+                    current_node = node
+                edge = (min(current_node, depot), max(current_node, depot))
+                if edge in feromones: feromones[edge] += self.sigma / bestSolution[1]
+        
         return bestSolution, feromones
 
-    def solve(self, N, capa, nodes_coord, demands):
-        """ VRPB ¹®Á¦¸¦ ÇØ°áÇÏ´Â ¸ŞÀÎ ÄÁÆ®·Ñ·¯ """
-        linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, nodes_coord, demands)
-        
-        bestSolution = None
+    def solve(self, K, capa, nodes_coord, demands):
+            """
+            [1. í´ëŸ¬ìŠ¤í„°ë§ -> 2. ACO ê²½ë¡œíƒìƒ‰ -> 3. 2-opt í›„ì²˜ë¦¬] í•˜ì´ë¸Œë¦¬ë“œ ì „ëµ
+            """
+            # --- ë°ì´í„° ì¤€ë¹„ ---
+            linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, nodes_coord, demands)
+            dist_matrix = get_distance(nodes_coord)
+            bestSolution = None
 
-        for i in range(self.iterations):
-            solutions = []
-            for _ in range(self.ants):
-                # °³¹Ì°¡ °æ·Î¸¦ »ı¼ºÇÒ ¶§¸¶´Ù ¿øº» ³ëµå ¸®½ºÆ®¸¦ Àü´ŞÇØ¾ß ÇÔ
-                ant_solution = self.solutionOfOneAnt_VRPB(linehaul, backhaul, edges, capacity, demand_dict, feromones)
-                ant_distance = self.rateSolution(ant_solution, edges)
-                solutions.append((ant_solution, ant_distance))
-            
-            bestSolution, feromones = self.updateFeromone(feromones, solutions, bestSolution)
-            
-            if bestSolution:
-                print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}")
+            # --- ë©”ì¸ ë£¨í”„ ---
+            for i in range(self.iterations):
+                solutions = []
+                for _ in range(self.ants):
 
-        print("\n--- Final Solution ---")
-        print(f"Path: {bestSolution[0]}")
-        print(f"Total Distance: {bestSolution[1]:.2f}")
-        return bestSolution
-    
-if __name__ == "__main__":
-    # 1. ¹®Á¦ µ¥ÀÌÅÍ »ı¼º
-    N = 20
-    capa = 1000
-    nodes_coord = [(random.uniform(0, 100), random.uniform(0, 100)) for _ in range(N + 1)]
-    demands = [0] + [random.randint(50, 100) for _ in range(N // 2)] + [random.randint(-100, -50) for _ in range(N - N // 2)]
-    random.shuffle(demands[1:])
+                    # --- 1ë‹¨ê³„ & 2ë‹¨ê³„: ì„  í´ëŸ¬ìŠ¤í„°ë§(CP-SAT) + ê²½ë¡œ ìˆœì„œ íƒìƒ‰(ACO) ---
+                    # solution_one_ant_VRPBê°€ í´ëŸ¬ìŠ¤í„°ë§ í›„ ACOë¡œ ê²½ë¡œ ìˆœì„œë¥¼ ì°¾ì•„ì˜´
+                    ant_solution = self.solution_one_ant_VRPB(K, linehaul, backhaul, edges, capacity, demand_dict, feromones, nodes_coord)
 
-    # 2. ACO_VRPB °´Ã¼ »ı¼º ¹× ¹®Á¦ ÇØ°á
-    aco_solver = ACO_VRPB(iterations=100, ants=20)
-    final_solution = aco_solver.solve(N + 1, capa, nodes_coord, demands)
+                    # --- 3ë‹¨ê³„: ê²½ë¡œ í›„ì²˜ë¦¬ (2-opt) ---
+                    optimized_paths = []
+                    if ant_solution:
+                        for path in ant_solution:
+                            if len(path) > 1: # ë…¸ë“œê°€ 2ê°œ ì´ìƒì¸ ê²½ë¡œë§Œ 2-opt ìˆ˜í–‰
+                                # VRPB ê·œì¹™ì„ ì•„ëŠ” 2-opt í•¨ìˆ˜ë¡œ ê²½ë¡œ ë‹¤ë“¬ê¸°
+                                _, optimized_path = two_opt([0] + path, dist_matrix, demand_dict)
+                                optimized_paths.append(optimized_path[1:]) # depot ì œì™¸í•˜ê³  ì €ì¥
+                            else:
+                                optimized_paths.append(path)
+
+                    # 'ê°œì„ ëœ í•´ë‹µ'ìœ¼ë¡œ ê±°ë¦¬ í‰ê°€
+                    ant_distance = self.rate_solution(optimized_paths, K, edges, demand_dict)
+                    solutions.append((optimized_paths, ant_distance))
+
+                # --- í•™ìŠµ ë‹¨ê³„ ---
+                bestSolution, feromones = self.update_feromone(feromones, solutions, bestSolution)
+
+                if bestSolution and bestSolution[1] != float('inf'):
+                    print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}, Vehicles = {len(bestSolution[0])}")
+                else:
+                    print(f"Iteration {i+1}: Finding valid solution...")
+
+            # --- ìµœì¢… ê²°ê³¼ ì¶œë ¥ ---
+            print("\n--- Final Solution ---")
+            if bestSolution and bestSolution[1] != float('inf'):
+                print(f"Path: {bestSolution[0]}")
+                print(f"Total Distance: {bestSolution[1]:.2f}")
+            else:
+                print("Failed to find a valid solution with the given constraints.")
+
+            return bestSolution
