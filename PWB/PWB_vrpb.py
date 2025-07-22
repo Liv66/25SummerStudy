@@ -255,8 +255,8 @@ def Iteration_VRPB(problem_info, time_limit, start_time, capacities, depot_idx, 
                                              kde_backhaul, mins_backhaul, maxs_backhaul, n, m, vehicle_capacity,
                                              demands, node_types, coords_dict, dist_matrix)
 
-        # if check_feasible_wb(problem_info, routes, 0, 1) == 0:
-        #     continue
+        if check_feasible_wb(problem_info, routes, 0, 1) == 0:
+            continue
 
         if total_cost < best_cost:
             print(f"✅ Improved: {best_cost:.2f} → {total_cost} ({time.time() - start_time:.2f}s)")
