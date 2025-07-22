@@ -63,82 +63,63 @@ def to_kjh_types(node_types_internal):
 # ─────────────────────────────────────────────────────────────
 # 1) Constraint-Aware Greedy Insertion (VRPB)  ―  (기존 그대로)
 # ─────────────────────────────────────────────────────────────
-def greedy_insertion_vrpb(
-    delivery_idx: list[int],
-    pickup_idx: list[int],
-    demands: list[int],
-    capa: int,
-    dist: list[list[float]],
-    depot_idx: int,
-    node_types: list[int],
-) -> list[list[int]]:
+def greedy_insertion_vrpb(delivery_idx, pickup_idx, demands, capa, dist, depot_idx, node_types):
     print("[INFO] Start greedy_insertion_vrpb()")
     unassigned_deliv = set(delivery_idx)
     unassigned_pick  = set(pickup_idx)
-    routes: list[list[int]] = []
+    routes = []
 
-    # ① 배송 노드 먼저
+    # ① 배송 노드들을 차량별로 할당
     while unassigned_deliv:
         print(f"[INFO] New vehicle for delivery. Remaining deliveries: {len(unassigned_deliv)}")
-        route, load, cur = [depot_idx], 0, depot_idx
-        count = 0
-        while unassigned_deliv:
-            count += 1
-            if count > 200:
-                print("[WARNING] Too many delivery attempts, breaking.")
-                break
-            nxt = min(unassigned_deliv, key=lambda n: dist[cur][n])
-            delta = -demands[nxt] if node_types[nxt] == 1 else demands[nxt]
-            if load + delta > capa or load + delta < 0:
-                continue
+        route = [depot_idx]           # 경로 시작 (depot)
+        cur = depot_idx
+        load = capa                  # 차량을 용량만큼 적재한 상태로 시작
+        # 배송 고객 추가 루프
+        while True:
+            # 남은 용량(load) 내에서 추가 가능한 배송지 중 가장 가까운 노드 선택
+            candidates = [n for n in unassigned_deliv if demands[n] <= load]
+            if not candidates:
+                break  # 남은 용량으로 추가 가능 한 배송 없음 -> 배송 단계 종료
+            # 가장 가까운 후보 선택
+            nxt = min(candidates, key=lambda n: dist[cur][n])
             route.append(nxt)
-            load += delta
+            load -= demands[nxt]     # 배송 수행 → 적재량 감소
             cur = nxt
             unassigned_deliv.remove(nxt)
-
-        # ② 같은 차량에서 회수 노드
-        count = 0
-        while unassigned_pick:
-            count += 1
-            if count > 200:
-                print("[WARNING] Too many pickup attempts, breaking.")
-                break
-            nxt = min(unassigned_pick, key=lambda n: dist[cur][n])
-            delta = -demands[nxt] if node_types[nxt] == 1 else demands[nxt]
-            if load + delta > capa or load + delta < 0:
-                break
+        # ② 동일 차량으로 회수 노드 처리
+        while True:
+            candidates = [n for n in unassigned_pick if demands[n] <= (capa - load)]
+            if not candidates:
+                break  # 남은 공간으로 실을 수 있는 회수 없음 -> 회수 단계 종료
+            nxt = min(candidates, key=lambda n: dist[cur][n])
             route.append(nxt)
-            load += delta
+            load += demands[nxt]     # 회수 수행 → 적재량 증가
             cur = nxt
             unassigned_pick.remove(nxt)
-
+        # 경로 완료 (Depot 귀환)
         route.append(depot_idx)
         routes.append(route)
 
-    # ③ 남은 회수 노드
+    # ③ 남은 회수 노드들을 별도 차량으로 처리
     while unassigned_pick:
         print(f"[INFO] New vehicle for remaining pickups. Remaining pickups: {len(unassigned_pick)}")
-        route, load, cur = [depot_idx], 0, depot_idx
-        count = 0
-        while unassigned_pick:
-            count += 1
-            if count > 200:
-                print("[WARNING] Too many pickup attempts in residual phase, breaking.")
-                break
-            nxt = min(unassigned_pick, key=lambda n: dist[cur][n])
-            delta = -demands[nxt] if node_types[nxt] == 1 else demands[nxt]
-            if load + delta > capa or load + delta < 0:
-                break
+        route = [depot_idx]
+        cur = depot_idx
+        load = 0                    # 회수만 하는 경우 초기 적재 0 (빈 트럭 출발)
+        while True:
+            candidates = [n for n in unassigned_pick if demands[n] <= (capa - load)]
+            if not candidates:
+                break  # 남은 용량으로 실을 수 있는 회수 없음
+            nxt = min(candidates, key=lambda n: dist[cur][n])
             route.append(nxt)
-            load += delta
+            load += demands[nxt]    # 회수 적재
             cur = nxt
             unassigned_pick.remove(nxt)
         route.append(depot_idx)
         routes.append(route)
-
     print("[INFO] Greedy insertion finished.")
     return routes
-
 
 # ─────────────────────────────────────────────────────────────
 # 2) Utility: cost of one route  ―  (기존 그대로)
