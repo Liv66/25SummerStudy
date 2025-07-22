@@ -42,12 +42,18 @@ def is_route_feasible(
     return True
 
 
-def is_solution_feasible(routes, node_types, demands, capa, depot_idx):
-    """
-    솔루션 전체 제약 검사
-      - (i)~(vi) 각 경로 검사
-      - (iii) 모든 고객 노드를 1회 '정확히' 방문
-    """
+def is_solution_feasible(
+    routes: List[List[int]],
+    node_types: List[int],
+    demands: List[int],
+    capa: int,
+    depot_idx: int,
+    max_vehicles: int | None = None
+) -> bool:
+
+    if max_vehicles is not None and len(routes) > max_vehicles:
+        return False
+
     visited = set()
     for r in routes:
         if not is_route_feasible(r, node_types, demands, capa, depot_idx):
