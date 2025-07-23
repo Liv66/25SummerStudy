@@ -8,7 +8,7 @@ from cwj_master_postprocess import generate_augmented_routes
 from cwj_phase2_postprocess import prune_redundant_customers
 
 
-def run_column_generation(problem_info):
+def VRPB_CG_Heuristic(problem_info):
     K = problem_info['K']
     Q = problem_info['capa']
     node_types = problem_info['node_types']
@@ -71,7 +71,7 @@ def cwj_main(problem_info):
     print(f"Distance matrix size: {len(dist_mat)} x {len(dist_mat[0])}")
     print("==========================================")
 
-    solution = run_column_generation(problem_info)
+    solution = VRPB_CG_Heuristic(problem_info)
     print("Final solution:")
     total_cost = 0
     for route, cost in solution:

@@ -43,7 +43,7 @@ def labeling_algorithm(linehauls, backhauls, dist_mat, node_demands, node_types,
         for new_path, new_visited, new_load, new_cost, new_phase in extend_path(path, visited, load, cost, phase):
             heapq.heappush(queue, (new_cost, new_path, new_visited, new_load, new_phase))
 
-    # 추가: 어떤 고객이 커버되지 않았는지 확인
+    # 어떤 고객이 커버되지 않았는지 확인
     covered = set()
     for route, _ in routes:
         covered.update(route)
