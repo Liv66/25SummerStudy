@@ -1,3 +1,4 @@
+#<ALNS 수정 전>
 import random
 import math
 import time
@@ -16,8 +17,14 @@ def alns_vrpb(
     print("[INFO] Start ALNS (Adaptive Weight)")
     PENALTY_FACTOR = 100000000
 
-    def route_cost(route):
-        return sum(dist[route[i]][route[i + 1]] for i in range(len(route) - 1))
+    # ── ① route_cost + 캐시  ───────────────────────────────
+    _route_cost_cache: dict[tuple[int, ...], float] = {}
+    def route_cost(route: list[int]) -> float:
+        key = tuple(route)
+        if key not in _route_cost_cache:
+            _route_cost_cache[key] = sum(dist[route[i]][route[i+1]]
+                                         for i in range(len(route)-1))
+        return _route_cost_cache[key]
 
     def calculate_total_cost(routes):
         if not routes:
@@ -150,8 +157,8 @@ def alns_vrpb(
 
     best_routes = [r[:] for r in init_routes]
     best_cost = calculate_total_cost(best_routes)
-    cur_routes = [r[:] for r in best_routes]
-
+    cur_routes  = [r[:] for r in best_routes]   # ★ 추가
+    cur_cost    = best_cost                    # ★ 추가
     T = 1000.0
     target_accept = 0.3
     adjust_rate = 0.05
@@ -183,27 +190,29 @@ def alns_vrpb(
         d_counts[d_idx] += 1
         r_counts[r_idx] += 1
 
-        if new_cost < best_cost:
-            best_cost = new_cost
-            best_routes = [r[:] for r in new_routes]
-            cur_routes = [r[:] for r in new_routes]
-            d_scores[d_idx] += 5
+        # ── ⑤ 수용 규칙 & delta 수정 ────────────────────
+        if new_cost < best_cost:  # 글로벌 최적 갱신
+            best_cost, best_routes = new_cost, [r[:] for r in new_routes]
+
+        if new_cost < cur_cost:  # 현재 해보다 좋으면 무조건 수용
+            cur_cost, cur_routes = new_cost, [r[:] for r in new_routes]
+            d_scores[d_idx] += 5;
             r_scores[r_idx] += 5
             accepted += 1
-        else:
-            delta = best_cost - new_cost
-            prob = math.exp(delta / T)
-            if random.random() < prob:
-                cur_routes = [r[:] for r in new_routes]
-                d_scores[d_idx] += 1
+        else:  # 나쁘면 확률 수용
+            delta = cur_cost - new_cost  # ★ 부호 수정
+            if random.random() < math.exp(delta / T):
+                cur_cost, cur_routes = new_cost, [r[:] for r in new_routes]
+                d_scores[d_idx] += 1;
                 r_scores[r_idx] += 1
                 accepted += 1
 
+        # ── ⑥ 온도 조절 ────────────────────────────────
         if attempted > 10 and iteration % 20 == 0:
-            actual_accept = accepted / attempted
-            T *= math.exp(adjust_rate * (target_accept - actual_accept))
-            T = max(1.0, min(T, 100000.0))
-            accepted, attempted = 0, 0
+            real_acc = accepted / attempted
+            T *= math.exp(adjust_rate * (target_accept - real_acc))
+            T = max(1e-3, min(T, 100_000.0))     # 하한 1e‑3
+            accepted = attempted = 0
 
         if iteration % 50 == 0:
             update_weights(d_weights, d_scores, d_counts)

@@ -1,122 +1,336 @@
+"""
+KNY_main_improved.py  —  기존 KNY_VRPB 파이프라인 + 성능 최적화 패치 + DistanceCache 활용
+──────────────────────────────────────────────────────────────────────────
+* 달라진 점
+  1. fast_feasible_check  : KJH 변환 없이 경량 VRPB 제약 검사
+  2. find_best_insertion_fast : O(n) 수준의 pickup 삽입 탐색
+  3. improved_initial_solution / improved_greedy_vrpb : delivery‑pickup 페어링 기반
+  4. DistanceCache        : 루트 / 삽입 비용 캐싱 (실제 활용)
+  5. run_kjh_problem      : 초기해 생성 함수를 개선 버전으로 교체
+
+※ 내부 util · KNY_alns 구조(인터페이스)·check_feasible 는 기존과 같다고 가정.
+"""
+
 import json
 import random
 import math
 import time
 from pathlib import Path
+from typing import List
 
 from util import get_distance, plot_cvrp, check_feasible
-#from KNY_constraint import is_solution_feasible
 from KNY_alns import alns_vrpb
+
 random.seed(42)
 
+# ─────────────────────────────────────────────────────────────
+# 0) 공용 도우미 함수 / 클래스
+# ─────────────────────────────────────────────────────────────
+
+def route_cost(route: list[int], dist: list[list[float]]) -> float:
+    """단일 루트 비용 합산"""
+    return sum(dist[route[i]][route[i + 1]] for i in range(len(route) - 1))
 
 
-def check_feasible_internal(routes, node_types, demands, capa, depot_idx, problem_info):
-    """
-    내부 라우트들을 KJH-style 로 변환한 뒤 원본 check_feasible()로 검증.
-    ── 원본 규칙과 100 % 동일하게:
-       • 배송→회수 이후 ‘배송’ 금지
-       • line↔back 전환 시 load = 0 재설정
-       • load < 0 또한 즉시 불가
-       • 첫 고객이 backhaul(0)인 루트 금지
-    """
-    for route in routes:
-        if len(route) < 3:                 # depot-depot
-            continue
+class DistanceCache:
+    """거리 계산 캐싱: (route 튜플) → cost"""
 
-        if node_types[route[1]] == 0:      # back-only 출발 금지
+    def __init__(self, dist_matrix: List[List[float]]):
+        self.dist = dist_matrix
+        self.cache = {}
+        self.insertion_cache = {}
+
+    def get_route_cost(self, route):
+        key = tuple(route)
+        if key not in self.cache:
+            self.cache[key] = route_cost(route, self.dist)
+        return self.cache[key]
+
+    def get_insertion_cost(self, route, node, pos):
+        # 삽입 비용 캐싱: (route_tuple, node, pos) → cost
+        route_key = tuple(route)
+        key = (route_key, node, pos)
+        if key not in self.insertion_cache:
+            if pos >= len(route):
+                return float('inf')
+            self.insertion_cache[key] = (
+                self.dist[route[pos - 1]][node]
+                + self.dist[node][route[pos]]
+                - self.dist[route[pos - 1]][route[pos]]
+            )
+        return self.insertion_cache[key]
+
+    def clear_cache(self):
+        """캐시 초기화 (메모리 관리용)"""
+        self.cache.clear()
+        self.insertion_cache.clear()
+
+
+# 전역 캐시 인스턴스
+cache = None
+
+
+# ─────────────────────────────────────────────────────────────
+# 1) 경량 feasibility 체크 (KJH 변환 제거)
+# ─────────────────────────────────────────────────────────────
+
+def fast_feasible_check(
+    route: List[int],
+    node_types: List[int],
+    demands: List[int],
+    capa: int,
+    depot_idx: int,
+):
+    if route[0] != depot_idx or route[-1] != depot_idx:
+        return False  # depot 출발·복귀 확실히 체크
+
+    if len(route) < 3:
+        return True
+
+    if node_types[route[1]] == 0:  # backhaul부터 시작하면 불가
+        return False
+
+    load = 0
+    in_pickup = False
+
+    for n in route[1:-1]:
+        if node_types[n] == 1:  # delivery
+            if in_pickup:
+                return False  # pickup 이후 delivery 금지
+            load += demands[n]
+        else:  # pickup
+            if not in_pickup:
+                in_pickup = True
+                load = 0  # pickup 시작 시 적재초기화
+            load += demands[n]
+
+        if load > capa:
             return False
 
-        load, flag = 0, False              # flag=False ⇒ line 구간
-        for node in route[1:-1]:
-            t = node_types[node]
+    return True
 
-            # ▶︎ linehaul
-            if t == 1:
-                if flag:                   # back → line 재진입 금지
-                    return False
-                load += demands[node]
-            # ▶︎ backhaul
+
+# ─────────────────────────────────────────────────────────────
+# 2) O(n) 수준 pickup 삽입 탐색 (캐시 활용)
+# ─────────────────────────────────────────────────────────────
+
+def find_best_insertion_fast(
+    pickup_node: int,
+    routes: List[List[int]],
+    node_types: List[int],
+    demands: List[int],
+    capa: int,
+    dist: List[List[float]],
+    depot_idx: int,
+):
+    global cache
+    best_route_idx, best_pos, best_inc = None, None, float("inf")
+
+    for ridx, r in enumerate(routes):
+        deliv_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 1)
+        if deliv_load == 0:
+            continue
+        pickup_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 0)
+        if pickup_load + demands[pickup_node] > deliv_load:
+            continue
+
+        last_deliv = max((i for i, v in enumerate(r) if v != depot_idx and node_types[v] == 1), default=0)
+        for pos in range(last_deliv + 1, len(r)):
+            tmp = r[:pos] + [pickup_node] + r[pos:]
+            if not fast_feasible_check(tmp, node_types, demands, capa, depot_idx):
+                continue
+
+            # 캐시를 사용한 삽입 비용 계산
+            if cache:
+                inc = cache.get_insertion_cost(r, pickup_node, pos)
             else:
-                if not flag:               # 첫 backhaul 진입 시
-                    flag, load = True, 0
-                load += demands[node]
+                inc = (
+                    dist[r[pos - 1]][pickup_node]
+                    + dist[pickup_node][r[pos]]
+                    - dist[r[pos - 1]][r[pos]]
+                )
 
-            # 공통 용량 검사
-            if load > capa or load < 0:
-                return False
+            if inc < best_inc:
+                best_inc = inc
+                best_route_idx, best_pos = ridx, pos
 
-    # ── 외부 check_feasible 호출(원본 비용 계산용)
-    routes_kjh     = [[0 if v == depot_idx else v + 1 for v in r] for r in routes]
-    node_types_kjh = [0] + [1 if t == 1 else 2 for t in node_types]
+    return best_route_idx, best_pos, best_inc
 
-    tmp_problem = {
-        "K": max(len(routes) + 5, problem_info.get("K", 50)),
-        "node_types":   node_types_kjh,
-        "node_demands": [0] + demands,
-        "capa":         capa,
-        "dist_mat":     problem_info.get("dist_mat",
-                         [[0]*len(node_types_kjh)]*len(node_types_kjh)),
-    }
 
-    try:
-        return check_feasible(tmp_problem, routes_kjh, 0, 999) > 0
-    except Exception:
-        return False        # 변환 오류 시 infeasible
+# ─────────────────────────────────────────────────────────────
+# 3) 개선된 초기해 생성 (delivery‑pickup 페어링, 캐시 활용)
+# ─────────────────────────────────────────────────────────────
 
-def bin_packing_greedy(items, capa, max_bins=None):
-    """
-    items: List of (node_idx, demand)
-    capa: 최대 용량
-    max_bins: None 또는 최대 bin(차량) 개수
-    반환: [[node_idx, ...], [node_idx, ...], ...]  # 각 bin(차량)별 node index 리스트
-    """
-    bins = []
-    bin_loads = []
-    for node_idx, demand in sorted(items, key=lambda x: -x[1]):
+def improved_initial_solution(
+    delivery_idx: List[int],
+    pickup_idx: List[int],
+    demands: List[int],
+    capa: int,
+    dist: List[List[float]],
+    depot_idx: int,
+    node_types: List[int],
+    K: int,
+):
+    global cache
+    routes = []
+    used_deliv, used_pick = set(), set()
+
+    deliv_items = sorted(((n, demands[n]) for n in delivery_idx), key=lambda x: x[1], reverse=True)
+    pickup_items = [(n, demands[n]) for n in pickup_idx]
+
+    for d_node, d_dem in deliv_items:
+        if d_node in used_deliv:
+            continue
+        cur_route = [depot_idx, d_node]
+        cur_load = d_dem
+        used_deliv.add(d_node)
+
+        # 추가 delivery 탐색
+        for o_node, o_dem in deliv_items:
+            if o_node in used_deliv:
+                continue
+            if cur_load + o_dem > capa:
+                continue
+            if dist[d_node][o_node] > dist[d_node][depot_idx] * 1.5:
+                continue
+            cur_route.insert(-1, o_node)
+            cur_load += o_dem
+            used_deliv.add(o_node)
+
+        # pickup 삽입
+        avail_pick_cap = cur_load
+        cand = []
+        last_deliv = cur_route[-1] if len(cur_route) > 2 else cur_route[-2]
+        for p_node, p_dem in pickup_items:
+            if p_node in used_pick or p_dem > avail_pick_cap:
+                continue
+            cand.append((p_node, p_dem, dist[last_deliv][p_node]))
+        cand.sort(key=lambda x: x[2])
+
+        pick_load = 0
+        for p_node, p_dem, _ in cand:
+            if pick_load + p_dem <= avail_pick_cap:
+                cur_route.append(p_node)
+                pick_load += p_dem
+                used_pick.add(p_node)
+
+        cur_route.append(depot_idx)
+        routes.append(cur_route)
+        if len(routes) >= K:
+            break
+
+    # 남은 delivery → 기존 루트 삽입 또는 새 루트
+    rem_deliv = [n for n in delivery_idx if n not in used_deliv]
+    for d in rem_deliv:
         placed = False
-        for i, load in enumerate(bin_loads):
-            if load + demand <= capa:
-                bins[i].append(node_idx)
-                bin_loads[i] += demand
+        for r in routes:
+            load = sum(demands[v] for v in r[1:-1] if node_types[v] == 1)
+            if load + demands[d] <= capa:
+                last_deliv_idx = max((i for i, v in enumerate(r) if v != depot_idx and node_types[v] == 1), default=0)
+                r.insert(last_deliv_idx + 1, d)
                 placed = True
                 break
-        if not placed:
-            if max_bins and len(bins) >= max_bins:
-                raise ValueError(f"bin_packing: 더 이상 bin 추가 불가. demand = {demand} 남음")
-            bins.append([node_idx])
-            bin_loads.append(demand)
-    return bins
+        if not placed and len(routes) < K:
+            routes.append([depot_idx, d, depot_idx])
 
+    # 남은 pickup 빠른 삽입
+    rem_pick = [n for n in pickup_idx if n not in used_pick]
+    for p in rem_pick:
+        ridx, pos, _ = find_best_insertion_fast(p, routes, node_types, demands, capa, dist, depot_idx)
+        if ridx is not None:
+            routes[ridx].insert(pos, p)
+
+    return routes
+
+
+# ─────────────────────────────────────────────────────────────
+# 4) Improved Greedy VRPB Wrapper (캐시 활용)
+# ─────────────────────────────────────────────────────────────
+
+def improved_greedy_vrpb(
+    delivery_idx,
+    pickup_idx,
+    demands,
+    capa,
+    dist,
+    depot_idx,
+    node_types,
+    K,
+):
+    global cache
+    print("[INFO] 개선된 Greedy VRPB 초기화…")
+
+    # 캐시 초기화
+    if cache:
+        cache.clear_cache()
+
+    routes = improved_initial_solution(
+        delivery_idx,
+        pickup_idx,
+        demands,
+        capa,
+        dist,
+        depot_idx,
+        node_types,
+        K,
+    )
+
+    # 추가로 남은 pickup 확인 (안전)
+    for p in pickup_idx:
+        if any(p in r for r in routes):
+            continue
+        ridx, pos, _ = find_best_insertion_fast(p, routes, node_types, demands, capa, dist, depot_idx)
+        if ridx is not None:
+            routes[ridx].insert(pos, p)
+        elif len(routes) < K:
+            routes.append([depot_idx, p, depot_idx])
+        else:
+            # 가장 여유 있는 루트에 강제 삽입
+            best_r = max(
+                routes,
+                key=lambda r: sum(demands[v] for v in r[1:-1] if node_types[v] == 1)
+                - sum(demands[v] for v in r[1:-1] if node_types[v] == 0),
+            )
+            last_deliv = max((i for i, v in enumerate(best_r) if v != depot_idx and node_types[v] == 1), default=0)
+            best_r.insert(last_deliv + 1, p)
+
+    print(f"[INFO] 개선된 Greedy 완료 · Route 수 = {len(routes)} (K={K})")
+    return routes
+
+
+# ─────────────────────────────────────────────────────────────
+# 5) KJH JSON Adapter (변경 없음)
+# ─────────────────────────────────────────────────────────────
 
 def convert_kjh_problem(problem_info: dict):
-    capa        = problem_info["capa"]
-    coords_all  = problem_info["node_coords"]      # [depot] + customers
+    capa = problem_info["capa"]
+    coords = problem_info["node_coords"]
     demands_all = [abs(d) for d in problem_info["node_demands"]]
-    types_all   = problem_info["node_types"]       # 0=depot, 1=linehaul, 2=backhaul
+    types_all = problem_info["node_types"]
 
-    # ── depot은 0, 고객은 1…N  인덱스로 통일 ─────────────────────────
     delivery_idx, pickup_idx = [], []
-    node_types_internal      = [0] * len(coords_all)   # 0번째는 depot
-    demands_internal         = [0] * len(coords_all)   # 〃
+    node_types_internal = [0] * len(coords)
+    demands_internal = [0] * len(coords)
 
-    for j in range(1, len(coords_all)):                # 고객만 순회
-        cust_type = 1 if types_all[j] == 1 else 0      # 1=linehaul, 0=backhaul
-        node_types_internal[j] = cust_type
-        demands_internal[j]    = demands_all[j]
+    for j in range(1, len(coords)):
+        is_delivery = 1 if types_all[j] == 1 else 0
+        node_types_internal[j] = is_delivery
+        demands_internal[j] = demands_all[j]
+        (delivery_idx if is_delivery else pickup_idx).append(j)
 
-        if cust_type == 1:
-            delivery_idx.append(j)   # 고객 인덱스 그대로 (1…)
-        else:
-            pickup_idx.append(j)
+    dist_matrix = problem_info["dist_mat"]
+    depot_idx = 0
 
-    dist_matrix = problem_info["dist_mat"]             # JSON 거리행렬 그대로
-    depot_idx   = 0
-
-    return (delivery_idx, pickup_idx, demands_internal,
-            capa, dist_matrix, depot_idx,
-            node_types_internal, coords_all)
-
+    return (
+        delivery_idx,
+        pickup_idx,
+        demands_internal,
+        capa,
+        dist_matrix,
+        depot_idx,
+        node_types_internal,
+        coords,
+    )
 
 
 def load_kjh_json(path: str):
@@ -133,319 +347,12 @@ def to_kjh_types(node_types_internal):
     return [0] + [1 if t == 1 else 2 for t in node_types_internal]
 
 
-def redistribute_and_force_insert(pick, routes, demands, node_types, capa, depot, problem_info):
-    """노드 재분배로 공간 확보 후 pick 삽입. 실패 시 False."""
-    # 가장 가벼운 배송노드를 찾아 다른 루트로 이동
-    src = min((r for r in routes if any(node_types[v] == 1 for v in r[1:-1] if v != depot)),
-              key=lambda r: sum(demands[v] for v in r[1:-1]), default=None)
-    if src is None: return False
+# ─────────────────────────────────────────────────────────────
+# 6) ALNS 후처리: cross‑route 2‑opt* (캐시 활용)
+# ─────────────────────────────────────────────────────────────
 
-    cand = min(
-        (v for v in src[1:-1] if node_types[v] == 1),
-        key=lambda v: demands[v],
-        default=None
-    )
-    if cand is None: return False
-
-    # cand를 수용할 다른 루트 탐색
-    for dst in routes:
-        if dst is src: continue
-        if any(node_types[v] == 1 for v in dst[1:-1] if v != depot):
-            if sum(demands[v] for v in dst[1:-1]) + demands[cand] <= capa:
-                # 이동 실행
-                src.remove(cand)
-                pos = max((i for i, v in enumerate(dst) if v != depot and node_types[v] == 1), default=0) + 1
-                dst.insert(pos, cand)
-
-                # src에 pick 삽입 시도
-                pos = max((i for i, v in enumerate(src) if v != depot and node_types[v] == 1), default=0) + 1
-                if sum(demands[v] for v in src[1:-1]) + demands[pick] <= capa:
-                    src.insert(pos, pick)
-                    return True
-
-                # 복구
-                dst.remove(cand)
-                src.insert(pos, cand)
-    return False
-
-
-def force_insert_pickup(unassigned, routes, demands, node_types, capa, dist, depot, problem_info):
-    """pickup 노드를 반드시 기존 배송 루트에 삽입(재분배 필요 시 수행)"""
-    for n in list(unassigned):
-        print(f"[DEBUG] 회수노드 {n} (demand={demands[n]}) 삽입 시도...")
-
-        # 각 루트의 현재 상태 확인
-        for i, r in enumerate(routes):
-            delivery_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 1)
-            pickup_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 0)
-            available_pickup = delivery_load - pickup_load
-            print(f"  Route {i}: 배송={delivery_load}, 회수={pickup_load}, 회수가능={available_pickup}")
-
-        # 1단계: 기존 루트에 직접 삽입 시도 (완화된 조건)
-        best_r, best_pos, best_inc = None, None, float('inf')
-        for r in routes:
-            if not any(node_types[v] == 1 for v in r[1:-1] if v != depot):
-                continue
-
-            # 완화된 용량 체크: 배송량이 있으면 회수 가능
-            delivery_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 1)
-            pickup_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 0)
-
-            # 조건 완화: 배송량이 있고, 새 회수량을 더해도 용량 초과하지 않으면 OK
-            if delivery_load > 0 and (pickup_load + demands[n] <= delivery_load):
-                # 배송 노드들 뒤에 삽입 위치 찾기
-                last_delivery_idx = max((i for i, v in enumerate(r) if v != depot and node_types[v] == 1), default=0)
-
-                for pos in range(last_delivery_idx + 1, len(r)):
-                    # ① 삽입한 경로 한 번 생성
-                    # ────────────────────────────────
-                    temp_route = r[:pos] + [n] + r[pos:]
-
-                    # 간단한 feasibility 체크 (완화됨)
-                    is_valid, tmp_load, delivery_phase = True, 0, True
-                    for node in temp_route[1:-1]:
-                        if node_types[node] == 1:  # 배송
-                            if not delivery_phase:
-                                is_valid = False;
-                                break
-                            tmp_load += demands[node]
-                        else:  # 회수
-                            if delivery_phase:  # 첫 back 진입
-                                delivery_phase, tmp_load = False, 0
-                            tmp_load += demands[node]
-
-                        if tmp_load > capa or tmp_load < 0:  # 두 방향 모두 금지
-                            is_valid = False;
-                            break
-
-                    # 기본 VRPB 제약만 체크 (더 관대하게)
-                    is_valid = True
-                    temp_load = 0
-                    delivery_phase = True
-
-                    for idx in range(1, len(temp_route) - 1):
-                        node = temp_route[idx]
-                        if node_types[node] == 1:  # 배송
-                            if not delivery_phase:  # 회수 후 배송은 불가
-                                is_valid = False
-                                break
-                            temp_load += demands[node]
-                        else:  # 회수
-                            delivery_phase = False
-                            temp_load -= demands[node]
-
-                        # 용량 체크 (음수는 허용, 단지 capa 초과만 체크)
-                        if temp_load > capa:
-                            is_valid = False
-                            break
-
-                    if is_valid:
-                        inc = dist[r[pos - 1]][n] + dist[n][r[pos]] - dist[r[pos - 1]][r[pos]]
-                        if inc < best_inc:
-                            best_r, best_pos, best_inc = r, pos, inc
-
-        if best_r:
-            print(f"[DEBUG] Node {n} 성공적으로 삽입됨")
-            best_r.insert(best_pos, n)
-            unassigned.remove(n)
-            continue
-
-        # 2단계: 재분배 시도 (개선된 로직)
-        print(f"[DEBUG] Node {n} 재분배 시도...")
-        inserted_via_redistribution = False
-
-        # 가장 여유있는 루트 찾기
-        target_routes = []
-        for r in routes:
-            delivery_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 1)
-            pickup_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 0)
-            if delivery_load > pickup_load:  # 회수 여유가 있는 루트
-                available_space = delivery_load - pickup_load
-                target_routes.append((r, available_space))
-
-        # 여유 공간 순으로 정렬
-        target_routes.sort(key=lambda x: x[1], reverse=True)
-
-        for target_route, available_space in target_routes:
-            if available_space >= demands[n]:
-                # 배송 노드들 뒤에 삽입
-                last_delivery_idx = max((i for i, v in enumerate(target_route) if v != depot and node_types[v] == 1),
-                                        default=0)
-                insert_pos = last_delivery_idx + 1
-
-                target_route.insert(insert_pos, n)
-                unassigned.remove(n)
-                inserted_via_redistribution = True
-                print(f"[DEBUG] Node {n} 재분배로 삽입 성공")
-                break
-
-        if inserted_via_redistribution:
-            continue
-
-        # 3단계: 새 루트 생성 (단독 회수 루트)
-        print(f"[DEBUG] Node {n}을 위한 새 루트 생성 시도...")
-
-        # 단독 회수 노드도 허용 (특별한 경우)
-        #if demands[n] <= capa:
-            #new_route = [depot, n, depot]
-            #routes.append(new_route)
-            #unassigned.remove(n)
-            #print(f"[DEBUG] Node {n}을 위한 새 루트 생성 성공 (단독 회수)")
-            #continue
-
-        # 4단계: 다른 루트에서 배송 노드를 가져와서 새 루트 생성
-        print(f"[DEBUG] Node {n}을 위한 배송+회수 조합 루트 생성 시도...")
-
-        # 가장 작은 배송 노드를 찾아서 함께 새 루트 생성
-        min_delivery_node = None
-        min_delivery_demand = float('inf')
-        source_route = None
-
-        for r in routes:
-            for i, node in enumerate(r[1:-1], 1):
-                if node_types[node] == 1 and demands[node] < min_delivery_demand:
-                    # 이 배송 노드와 회수 노드가 함께 갈 수 있는지 체크
-                    if demands[node] + demands[n] <= capa and demands[node] >= demands[n]:
-                        min_delivery_node = node
-                        min_delivery_demand = demands[node]
-                        source_route = r
-
-        if min_delivery_node is not None:
-            # 배송 노드를 원래 루트에서 제거
-            source_route.remove(min_delivery_node)
-
-            # 새 루트 생성 (배송 -> 회수 순서)
-            new_route = [depot, min_delivery_node, n, depot]
-            routes.append(new_route)
-            unassigned.remove(n)
-            print(f"[DEBUG] Node {n}을 배송노드 {min_delivery_node}와 함께 새 루트 생성 성공")
-            continue
-
-        # 최종 실패
-        print(f"[ERROR] Node {n} 상세 정보:")
-        print(f"  - Demand: {demands[n]}")
-        print(f"  - Capacity: {capa}")
-        print(f"  - 현재 루트 수: {len(routes)}")
-        print(
-            f"  - 각 루트별 배송량: {[sum(demands[node] for node in route[1:-1] if node_types[node] == 1) for route in routes]}")
-        print(
-            f"  - 각 루트별 회수량: {[sum(demands[node] for node in route[1:-1] if node_types[node] == 0) for route in routes]}")
-
-        # 마지막 수단: 강제로 가장 큰 여유가 있는 루트에 삽입
-        print(f"[DEBUG] 마지막 수단: 강제 삽입 시도...")
-
-        best_route_for_force = None
-        max_available = -1
-
-        for r in routes:
-            delivery_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 1)
-            pickup_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 0)
-
-            if delivery_load > 0:  # 배송이 있는 루트만
-                available = delivery_load - pickup_load
-                if available > max_available:
-                    max_available = available
-                    best_route_for_force = r
-
-        if best_route_for_force is not None and max_available > 0:
-            # 강제 삽입 (제약 조건 무시)
-            last_delivery_idx = max(
-                (i for i, v in enumerate(best_route_for_force) if v != depot and node_types[v] == 1), default=0)
-            best_route_for_force.insert(last_delivery_idx + 1, n)
-            unassigned.remove(n)
-            print(f"[DEBUG] Node {n} 강제 삽입 성공 (제약 완화)")
-        else:
-            raise ValueError(f"[❌] 회수노드 {n}은 어떤 차량에도 배정 불가")
-
-
-def greedy_insertion_vrpb_binpacking(delivery_idx, pickup_idx, demands, capa, dist, depot_idx, node_types, K,
-                                     problem_info):
-    print("[INFO] Bin-packing Greedy 방식 Route 초기화 시작")
-    # 1. 배송 노드를 demand순 K-bin으로 packing (Greedy)
-    delivery_items = [(n, demands[n]) for n in delivery_idx]
-    bins = bin_packing_greedy(delivery_items, capa, max_bins=K)
-    if len(bins) > K:
-        raise ValueError(f"[❌] bin_packing 결과 K({K})대 내로 배송불가 (배송만 {len(bins)}대 필요)")
-
-    # 2. 배송 노드 bin별로 루트 생성 (depot→배송들→depot)
-    routes = []
-    for bin_nodes in bins:
-        route = [depot_idx] + bin_nodes + [depot_idx]
-        routes.append(route)
-
-    # 3. 회수 노드를 기존 route에 feasible하게 삽입
-    unassigned_pick = set(pickup_idx)
-    for n in list(unassigned_pick):
-        best_route = None
-        best_pos = None
-        best_incr = float('inf')
-        for r in routes:
-            # 배송 마지막 인덱스 찾기
-            last_deliv = max(
-                (i for i, v in enumerate(r) if v != depot_idx and node_types[v] == 1),
-                default=0
-            )
-            for pos in range(last_deliv + 1, len(r)):
-                tmp_r = r[:pos] + [n] + r[pos:]
-                if check_feasible_internal([tmp_r], node_types, demands, capa, depot_idx, problem_info):
-                    # 증분 비용 계산
-                    dist_incr = dist[r[pos - 1]][n] + dist[n][r[pos]] - dist[r[pos - 1]][r[pos]]
-                    if dist_incr < best_incr:
-                        best_incr = dist_incr
-                        best_route = r
-                        best_pos = pos
-        if best_route is not None:
-            best_route.insert(best_pos, n)
-            unassigned_pick.remove(n)
-
-    # 남은 회수노드 강제 삽입 (재분배 포함)
-    if unassigned_pick:
-        print(f"[INFO] {len(unassigned_pick)}개 회수노드 강제 삽입 시도")
-        force_insert_pickup(unassigned_pick, routes, demands, node_types, capa, dist, depot_idx, problem_info)
-
-    print(f"[INFO] Bin-packing Greedy 초기화 완료. Route 수: {len(routes)} (제한: {K})")
-    return routes
-
-
-def merge_routes_if_possible(routes, demands, node_types, capa, depot_idx, dist, K, problem_info):
-    def is_feasible(route):
-        load = 0
-        seen_pick = False
-        for i in range(1, len(route) - 1):
-            n = route[i]
-            if node_types[n] == 1:
-                load += demands[n]
-                if seen_pick:
-                    return False
-            else:
-                load -= demands[n]
-                seen_pick = True
-            if load > capa or load < 0:
-                return False
-        return route[0] == depot_idx and route[-1] == depot_idx
-
-    merged = True
-    while merged and len(routes) > K:
-        merged = False
-        for i in range(len(routes)):
-            for j in range(i + 1, len(routes)):
-                r1, r2 = routes[i], routes[j]
-                new_route = r1[:-1] + r2[1:]
-                if is_feasible(new_route):
-                    routes[i] = new_route
-                    del routes[j]
-                    merged = True
-                    break
-            if merged:
-                break
-    return routes
-
-
-def route_cost(route: list[int], dist: list[list[float]]) -> float:
-    return sum(dist[route[i]][route[i + 1]] for i in range(len(route) - 1))
-
-
-def cross_route_2opt_star(routes, dist, node_types, demands, capa, depot_idx, problem_info):
+def cross_route_2opt_star(routes, dist, node_types, demands, capa, depot_idx):
+    global cache
     changed = True
     while changed:
         changed = False
@@ -455,112 +362,113 @@ def cross_route_2opt_star(routes, dist, node_types, demands, capa, depot_idx, pr
                 for idx1 in range(1, len(r1) - 1):
                     for idx2 in range(1, len(r2) - 1):
                         if node_types[r1[idx1]] != node_types[r2[idx2]]:
-                            continue  # linehaul과 backhaul 섞지 않음
-
+                            continue
                         new_r1 = r1[:idx1] + [r2[idx2]] + r1[idx1 + 1:]
                         new_r2 = r2[:idx2] + [r1[idx1]] + r2[idx2 + 1:]
-
-                        if not check_feasible_internal([new_r1, new_r2], node_types, demands, capa, depot_idx,
-                                                       problem_info):
+                        if not fast_feasible_check(new_r1, node_types, demands, capa, depot_idx):
+                            continue
+                        if not fast_feasible_check(new_r2, node_types, demands, capa, depot_idx):
                             continue
 
-                        old_cost = route_cost(r1, dist) + route_cost(r2, dist)
-                        new_cost = route_cost(new_r1, dist) + route_cost(new_r2, dist)
-                        if new_cost < old_cost:
+                        # 캐시를 사용한 비용 계산
+                        if cache:
+                            old_cost = cache.get_route_cost(r1) + cache.get_route_cost(r2)
+                            new_cost = cache.get_route_cost(new_r1) + cache.get_route_cost(new_r2)
+                        else:
+                            old_cost = route_cost(r1, dist) + route_cost(r2, dist)
+                            new_cost = route_cost(new_r1, dist) + route_cost(new_r2, dist)
+
+                        if old_cost > new_cost:
                             routes[i], routes[j] = new_r1, new_r2
                             changed = True
     return routes
 
 
-def run_kjh_problem(problem_path):
+# ─────────────────────────────────────────────────────────────
+# 7) 메인 드라이버 (캐시 초기화 추가)
+# ─────────────────────────────────────────────────────────────
+
+def run_kjh_problem(problem_path: Path):
+    global cache
+
     with open(problem_path, "r", encoding="utf-8") as f:
         problem_info = json.load(f)
     K = problem_info["K"]
 
-    (delivery_idx, pickup_idx, demands, capa,
-     dist, depot_idx, node_types, all_coords) = load_kjh_json(problem_path)
+    (
+        delivery_idx,
+        pickup_idx,
+        demands,
+        capa,
+        dist,
+        depot_idx,
+        node_types,
+        coords,
+    ) = load_kjh_json(problem_path)
 
-    total_delivery = sum(d for i, d in enumerate(demands) if node_types[i] == 1)
-    min_possible = math.ceil(total_delivery / capa)
-    if min_possible > K:
-        raise ValueError(f"Instance infeasible: needs at least {min_possible} "
-                         f"vehicles (K={K}).")
+    # DistanceCache 초기화
+    cache = DistanceCache(dist)
+    print("[INFO] DistanceCache 초기화 완료")
 
-    init_routes = greedy_insertion_vrpb_binpacking(
-        delivery_idx, pickup_idx, demands, capa, dist, depot_idx, node_types, K, problem_info
+    total_delivery = sum(demands[i] for i in delivery_idx)
+    if math.ceil(total_delivery / capa) > K:
+        raise ValueError("Instance infeasible: delivery 총수요가 K·capa 를 초과")
+
+    init_routes = improved_greedy_vrpb(
+        delivery_idx,
+        pickup_idx,
+        demands,
+        capa,
+        dist,
+        depot_idx,
+        node_types,
+        K,
     )
-    print(f"[INFO] Initial route count: {len(init_routes)} vehicles (max {K})")
 
-    init_routes = merge_routes_if_possible(
-        init_routes, demands, node_types, capa, depot_idx, dist, K, problem_info
-    )
-    print(f"[INFO] Route count after merging (feasible merge): {len(init_routes)}")
+    print(f"[INFO] Initial route count: {len(init_routes)}")
 
-    pickup_only_routes = [r for r in init_routes if all(node_types[v] == 0 for v in r[1:-1])]
-    for r in pickup_only_routes:
-        init_routes.remove(r)
-        for n in r[1:-1]:
-            best_cost = float("inf")
-            best_r = None
-            best_pos = None
-
-            for r2 in init_routes:
-                delivered = sum(demands[v] for v in r2[1:-1] if node_types[v] == 1)
-                picked = sum(demands[v] for v in r2[1:-1] if node_types[v] == 0)
-
-                if delivered > 0:
-                    avail_pick = delivered - picked
-                else:
-                    avail_pick = capa - picked
-
-                if demands[n] > avail_pick:
-                    continue
-
-                insert_pos = max(i for i, v in enumerate(r2)
-                                 if v == depot_idx or node_types[v] == 1) + 1
-
-                prev, nxt = r2[insert_pos - 1], r2[insert_pos]
-                added = dist[prev][n] + dist[n][nxt] - dist[prev][nxt]
-
-                if added < best_cost:
-                    best_cost = added
-                    best_r = r2
-                    best_pos = insert_pos
-
-            if best_r is not None:
-                best_r.insert(best_pos, n)
-            else:
-                init_routes.append([depot_idx, n, depot_idx])
-
-    print(f"[INFO] Route count after merging: {len(init_routes)}")
-
+    # ── ALNS
     start = time.time()
-    best_routes, best_cost = alns_vrpb(
-        init_routes, dist, node_types, demands, capa, depot_idx, max_vehicles=K, time_limit=60
+    best_routes, _ = alns_vrpb(
+        init_routes,
+        dist,
+        node_types,
+        demands,
+        capa,
+        depot_idx,
+        max_vehicles=K,
+        time_limit=60,
     )
     elapsed = time.time() - start
 
-    best_routes = cross_route_2opt_star(best_routes, dist, node_types, demands, capa, depot_idx, problem_info)
-    best_cost = sum(route_cost(r, dist) for r in best_routes)
+    best_routes = cross_route_2opt_star(best_routes, dist, node_types, demands, capa, depot_idx)
 
-    routes_kjh = to_kjh_routes(best_routes, depot_idx)
-    node_types_kjh = to_kjh_types(node_types)
+    # 캐시를 사용한 최종 비용 계산
+    best_cost = sum(cache.get_route_cost(r) for r in best_routes)
 
-    print("[INFO] Final feasibility check with check_feasible()...")
-    obj = check_feasible(problem_info, routes_kjh, elapsed, timelimit=60)
+    # ── 최종 검증
+    obj = check_feasible(problem_info, to_kjh_routes(best_routes, depot_idx), elapsed, timelimit=60)
     if obj:
-        print(f"[✅] check_feasible 통과! 총 비용: {obj:.1f}")
+        print(f"[✅] check_feasible 통과! obj = {obj:.1f}")
     else:
-        print("[❌] check_feasible 기준에서 유효하지 않은 해입니다.")
+        print("[❌] check_feasible 실패")
 
-    for k, r in enumerate(routes_kjh):
-        print(f"vehicle {k}: {r}")
+    # 캐시 통계 출력
+    print(f"[INFO] 캐시 통계 - Route 캐시: {len(cache.cache)}개, 삽입 캐시: {len(cache.insertion_cache)}개")
 
-    plot_cvrp(all_coords, best_routes, f"VRPB obj: {best_cost:.1f}")
+    capa_val = capa  # 편의상 별도 변수
+    for k, r in enumerate(best_routes):
+        # -------------- 적재율 계산 ------------------ #
+        delivery_load = sum(demands[n] for n in r if node_types[n] == 1)
+        # depot 출발 시 적재량 = 배송 총수요
+        utilisation = delivery_load / capa_val  # 0.0 ~ 1.0
+        print(f"vehicle {k:2d}: {r}")
+        print(f"           ↳ 출발 적재량 = {delivery_load:>6.1f} / {capa_val}  "
+              f"(utilisation {utilisation:5.1%})")  # ★
+
+    plot_cvrp(coords, best_routes, f"VRPB obj: {best_cost:.1f}")
 
 
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parents[1]
-    PROBLEM_JSON = ROOT / "instances" / "problem_100_0.7.json"
-
-    run_kjh_problem(PROBLEM_JSON)
+    run_kjh_problem(ROOT / "instances" / "problem_20_0.7.json")
