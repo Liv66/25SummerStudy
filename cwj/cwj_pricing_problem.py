@@ -1,97 +1,54 @@
-from collections import deque
+# cwj_pricing_problem.py
+import heapq
 
-def solve_pricing_problem(duals, node_types, node_demands, capa, dist_mat, forbidden_nodes=None):
+def labeling_algorithm(linehauls, backhauls, dist_mat, node_demands, node_types, Q):
     """
-    개선된 Labeling 기반 Pricing Problem Solver (첫 개선 route에서 조기 종료)
+    Labeling 알고리즘 (linehaul → backhaul 순서), capa 제약 반영
     """
-    print("[DEBUG] Start Pricing Problem with Labeling Algorithm")
+    depot = 0
+    routes = []
 
-    N = len(node_types)
-    if forbidden_nodes is None:
-        forbidden_nodes = set()
-    else:
-        print(f"[DEBUG] Forbidden customer nodes: {sorted(forbidden_nodes)}")
+    def is_feasible(load):
+        return 0 <= load <= Q
 
-    Label = lambda node, visited, demand, cost, path: (node, visited, demand, cost, path)
-    queue = deque()
-    queue.append(Label(0, set(), 0, 0.0, [0]))
+    def extend_path(path, visited, load, cost, phase):
+        last = path[-1]
+        candidates = linehauls if phase == 'L' else backhauls
+        for nxt in candidates:
+            if nxt in visited:
+                continue
+            if phase == 'L' and any(node_types[i] == 2 for i in visited):
+                continue  # backhaul 방문 후 linehaul 금지
 
-    label_count = 0
-    pruned_count = 0
-    complete_routes = 0
-    visited_routes = set()
+            # load 업데이트
+            new_load = load - node_demands[nxt] if node_types[nxt] == 1 else load + node_demands[nxt]
+            if not is_feasible(new_load):
+                continue
 
+            new_cost = cost + dist_mat[last][nxt]
+            new_phase = 'L' if node_types[nxt] == 1 else 'B'
+            yield path + [nxt], visited | {nxt}, new_load, new_cost, new_phase
+
+    # 초기 상태: depot에서 가득 찬 상태로 출발
+    queue = [(0, [depot], {depot}, Q, 'L')]
     while queue:
-        node, visited, demand, cost, path = queue.popleft()
-        label_count += 1
+        cost, path, visited, load, phase = heapq.heappop(queue)
+        last = path[-1]
 
-        # Backhaul 선입 방지 (단, depot에서 바로 backhaul은 허용)
-        if node != 0 and node_types[node] == 2:
-            if any(node_types[i] == 1 for i in range(N) if i not in visited and i not in forbidden_nodes):
-                pruned_count += 1
-                continue
+        if len(path) > 2 and (phase == 'B' or all(node_types[i] == 1 for i in path[1:])):
+            full_path = path + [depot]
+            full_cost = cost + dist_mat[last][depot]
+            routes.append((full_path, full_cost))
 
-        # 노드 방문 시 처리
-        if node != 0:
-            if node in forbidden_nodes:
-                pruned_count += 1
-                continue
-            demand += node_demands[node]
-            if demand > capa:
-                pruned_count += 1
-                continue
-            visited = visited | {node}
+        for new_path, new_visited, new_load, new_cost, new_phase in extend_path(path, visited, load, cost, phase):
+            heapq.heappush(queue, (new_cost, new_path, new_visited, new_load, new_phase))
 
-        # depot 복귀 경로 평가
-        if path[-1] == 0 and len(path) > 2:
-            route_tuple = tuple(path)
-            if route_tuple in visited_routes:
-                continue
-            visited_routes.add(route_tuple)
+    # 추가: 어떤 고객이 커버되지 않았는지 확인
+    covered = set()
+    for route, _ in routes:
+        covered.update(route)
+    missed = set(i for i in range(1, len(node_types))) - covered
+    if missed:
+        print(f"[WARNING] The following customers are not covered by any route: {missed}")
 
-            complete_routes += 1
-            reduced = cost - sum(duals[i - 1] for i in path if i != 0)
-            if reduced < 0:
-                print(f"[DEBUG] First improving route found: {path} | Reduced cost = {reduced:.4f}")
-                print("========== [PRICING DEBUG REPORT] ==========")
-                print(f"Total labels generated: {label_count}")
-                print(f"Labels pruned (backhaul/overload/forbidden): {pruned_count}")
-                print(f"Complete routes evaluated: {complete_routes}")
-                print(f"Best route: {path}")
-                print(f"Best reduced cost: {reduced:.4f}")
-                print("============================================")
-                return list(path), reduced
-            continue
-
-        # 다음 노드 확장 (dual 기준 정렬)
-        customer_nodes = [i for i in range(1, N)]
-        next_nodes = sorted(customer_nodes, key=lambda i: -duals[i - 1])
-        for next_node in next_nodes:
-            if next_node == node or next_node in visited or next_node in forbidden_nodes:
-                continue
-            queue.append(Label(
-                next_node,
-                visited.copy(),
-                demand,
-                cost + dist_mat[node][next_node],
-                path + [next_node]
-            ))
-
-        # depot 복귀 시도 (최소 2개 이상 방문 후에만 허용)
-        if node != 0 and len(visited) >= 2 and path[-1] != 0:
-            queue.append(Label(
-                0,
-                visited.copy(),
-                demand,
-                cost + dist_mat[node][0],
-                path + [0]
-            ))
-
-    # 개선 패턴이 없을 경우
-    print("========== [PRICING DEBUG REPORT] ==========")
-    print(f"Total labels generated: {label_count}")
-    print(f"Labels pruned (backhaul/overload/forbidden): {pruned_count}")
-    print(f"Complete routes evaluated: {complete_routes}")
-    print("No feasible route found with negative reduced cost.")
-    print("============================================")
-    return [], float("inf")
+    return routes

@@ -1,39 +1,65 @@
-def generate_initial_patterns(node_types, node_demands, capacity, dist_mat, max_vehicles):
+import random
+from cwj_pricing_problem import labeling_algorithm
+
+def generate_initial_patterns(K, Q, node_types, node_demands, dist_mat):
     """
-    max_vehicles 제약을 만족하면서 모든 고객을 한 번 이상 포함하는 초기 패턴 생성.
-    1) Greedy하게 고객들을 묶되, 차량 수 제한 고려.
-    2) 필요한 경우 단일 노드 패턴으로 보완.
+    linehaul 여러 개 + backhaul 조합 기반으로 feasible route 생성
+    - 중복 경로 제거 (순서 동일)
+    - 노드 집합 동일한 경로 중 최소 비용만 유지
     """
+    depot = 0
     N = len(node_types)
-    customer_ids = list(range(1, N))
-    customer_ids.sort(key=lambda i: -node_demands[i])  # 큰 수요부터 먼저
+    linehauls = [i for i in range(1, N) if node_types[i] == 1]
+    backhauls = [i for i in range(1, N) if node_types[i] == 2]
 
-    patterns = []
-    costs = []
-    routes = [[] for _ in range(max_vehicles)]
-    demands = [0 for _ in range(max_vehicles)]
+    best_by_node_set = dict()       # key: frozenset(route[1:-1]), value: (route, cost)
+    unique_route_set = set()        # key: tuple(route)
 
-    # 1. 고객들을 max_vehicles 개의 route에 capacity 기준으로 분배
-    for i in customer_ids:
-        assigned = False
-        for r in range(max_vehicles):
-            if demands[r] + node_demands[i] <= capacity:
-                routes[r].append(i)
-                demands[r] += node_demands[i]
-                assigned = True
-                break
-        if not assigned:
-            # fallback: 추가 차량 허용 없이 단일 고객으로라도 넣어야 하므로 마지막 route에 강제 삽입 (무시)
-            routes[-1].append(i)
-            demands[-1] += node_demands[i]
+    tried = set()
+    pivot_candidates = random.sample(linehauls, min(K * 2, len(linehauls)))
 
-    # 2. 각 route를 depot 포함하여 [0, ..., 0] 경로로 구성
-    for route in routes:
-        if not route:
+    for pivot in pivot_candidates:
+        if pivot in tried:
             continue
-        full_route = [0] + route + [0]
-        cost = sum(dist_mat[full_route[i]][full_route[i+1]] for i in range(len(full_route)-1))
-        patterns.append(full_route)
-        costs.append(cost)
+        tried.add(pivot)
 
-    return patterns, costs
+        # 수요 기준 가까운 linehaul 최대 3개 선택
+        lh_subset = []
+        demand_sum = 0
+        for lh in sorted(linehauls, key=lambda x: dist_mat[pivot][x]):
+            if lh in lh_subset:
+                continue
+            if demand_sum + node_demands[lh] > Q:
+                break
+            lh_subset.append(lh)
+            demand_sum += node_demands[lh]
+
+        # backhaul 필터링
+        b_subset = [b for b in backhauls if node_demands[b] <= Q - demand_sum]
+
+        routes = labeling_algorithm(lh_subset, b_subset, dist_mat, node_demands, node_types, Q)
+
+        for route, cost in routes:
+            route_tuple = tuple(route)
+            node_set = frozenset(route[1:-1])
+
+            if route_tuple in unique_route_set:
+                continue  # 순서까지 같은 route 중복 제거
+            unique_route_set.add(route_tuple)
+
+            # 노드 집합이 같으면 더 나은 cost로 갱신
+            if node_set not in best_by_node_set or cost < best_by_node_set[node_set][1]:
+                best_by_node_set[node_set] = (route, cost)
+
+        print(f"[DEBUG] Found {len(routes)} routes for pivot {pivot} with lh_subset={lh_subset}")
+
+    route_pool = list(best_by_node_set.values())
+
+    print("[DEBUG] Total routes after filtering:", len(route_pool))
+    for r, _ in route_pool:
+        print(" - Route:", r)
+
+    if not route_pool:
+        print("[ERROR] 초기 route를 단 하나도 생성하지 못했습니다.")
+
+    return route_pool
