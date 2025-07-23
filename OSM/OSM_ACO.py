@@ -3,10 +3,10 @@ import numpy
 from OSM_util import get_distance, two_opt
 
 class ACO_VRPB:
-    def __init__(self, alpha=1, beta=5, sigma=3, ro=0.8, th=80, iterations=200, ants=22, q0=0.9):
+    def __init__(self, alpha=1, beta=1.5, sigma=3, ro=0.8, th=80, iterations=200, ants=22, q0=0.9):
         self.alpha = alpha
         self.beta = beta
-        self.sigma = sigma
+        self.sigma = sigma 
         self.ro = ro
         self.th = th
         self.iterations = iterations

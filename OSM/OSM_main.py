@@ -103,7 +103,7 @@ def OSM_main():
     VRPB 문제를 정의하고, ACO 솔버로 해결한 뒤, 결과를 출력/시각화합니다.
     """
     # --- 1. JSON 파일에서 문제 데이터 읽어오기 ---
-    file_path = 'C:/Users/risklab/Desktop/code/25SummerStudy/instances/problem_100_0.7.json'
+    file_path = 'C:/Users/risklab/Desktop/code/25SummerStudy/instances/problem_20_0.7.json'
     
     with open(file_path, 'r', encoding='utf-8') as f:
         problem_data = json.load(f)
@@ -124,7 +124,7 @@ def OSM_main():
     print(f"문제 파일 로드 완료: {file_path}")
     print("ACO_VRPB 솔버를 시작합니다...")
     
-    aco_solver = ACO_VRPB(iterations=50, ants=K, q0=0.9, alpha=1, beta=5)
+    aco_solver = ACO_VRPB(iterations=10000, ants=K, q0=0.9, alpha=1, beta=5)
     
     start_time = time.time() # This should now be fine
     ACO_solution = aco_solver.solve(K, capa, all_node_coord, demands)
@@ -132,31 +132,33 @@ def OSM_main():
     end_time = time.time()
     execution_time = end_time - start_time
 
+    # --- 3. 결과 처리 및 시각화 ---
     if ACO_solution and ACO_solution[1] != float('inf'):
         best_routes, best_distance = ACO_solution
-        
-        print("\n--- 최종 결과 ---")
-        modified_best_routes_for_plot = []
-        for idx, route in enumerate(best_routes):
-            full_route = [0] + route + [0]
-            modified_best_routes_for_plot.append(full_route)
-            print(f'Vehicle {idx+1} route: {route}')
-        print(f'>>> Total objective distance: {best_distance:.2f}')
 
+        print("\n--- 최종 결과 ---")
+        modified_best_routes_for_plot = [] # 이 리스트는 plot_cvrp를 위해 full_route를 저장합니다.
+        for idx, route in enumerate(best_routes):
+            full_route = [0] + route + [0] # 출발지(Depot 0)와 복귀지(Depot 0)를 추가합니다.
+            modified_best_routes_for_plot.append(full_route) # 시각화를 위한 리스트에 추가합니다.
+        for idx, route in enumerate(best_routes):
+            full_route = [0] + route + [0] # 출발지(Depot 0)와 복귀지(Depot 0)를 추가합니다.
+            modified_best_routes_for_plot.append(full_route) # 시각화를 위한 리스트에 추가합니다.
+            print(f'Vehicle {idx+1} route: {full_route}') # 여기서 full_route를 출력합니다.
+        print(f'>>> Total objective distance: {best_distance:.2f}')
         print("\n최적 경로를 시각화합니다.")
         plot_cvrp(
             nodes_coord=all_node_coord,
-            best_result_route=best_routes,
+            best_result_route=best_routes, # plot_cvrp는 내부적으로 depot을 추가하므로 depot제외 경로 전달
             demands=demands,
             title=f'ACO_VRPB Solution ({file_path}) | Total Distance: {best_distance:.2f}'
         )
-
+        # --- 4. 최종 해답 검증 실행 ---
         validate_solution(best_routes, K, capa, demands, node_types_dict, execution_time)
-
     else:
         print("\n알고리즘이 제약 조건을 만족하는 해답을 찾지 못했습니다.")
-        validate_solution([], K, capa, demands, node_types_dict, execution_time)
-        
+        # Even if no valid solution is found, you might want to log this or perform partial validation
+        validate_solution([], K, capa, demands, node_types_dict, execution_time) # Pass empty routes for failed solution
 
 if __name__ == '__main__':
     start_overall_time = time.time() # This should also be fine
