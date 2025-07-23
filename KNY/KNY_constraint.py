@@ -9,37 +9,37 @@ def is_route_feasible(
     capa: int,
     depot_idx: int,
 ) -> bool:
-    """
-    VRPB 6가지 제약 (i)~(vi) 검사
-    route : [depot] + 노드들 + [depot]
-    node_types[i] : 1 = 배송(line-haul), 0 = 회수(back-haul)
-    """
     # (i) Depot 출발·복귀
     if route[0] != depot_idx or route[-1] != depot_idx:
         return False
 
     # (iv) 배송 먼저, 그다음 회수
     seen_pick = False
-    for n in route[1:-1]:            # depot 제외
-        if node_types[n] == 0:       # 회수
+    for n in route[1:-1]:  # depot 제외
+        if node_types[n] == 0:
             seen_pick = True
-        elif seen_pick:              # 회수 뒤에 배송 등장 → 위배
-            return False
+        elif seen_pick:
+            return False  # 회수 뒤에 배송 등장 → 위배
 
-    # (vi) 최소 1개의 배송 노드 포함  ← depot 인덱스 제외
+    # (v) 적재량 시뮬레이션
+    load = capa  # 차량은 풀 적재로 출발
+    for n in route[1:-1]:
+        if node_types[n] == 1:
+            load -= demands[n]   # 배송하면 감소
+            if load < 0:        # 적재량 음수 불가
+                return False
+        else:
+            load += demands[n]    # 회수하면 증가
+            if load > capa:       # 용량 초과 불가
+                return False
+
+    # (vi) 적어도 1개는 고객 방문(실제로는 node_types==[]면 N=0아닌 한 여기서는 필요없음)
+    # (vi) 최소 1개의 배송 노드 포함
     if not any(node_types[n] == 1 for n in route if n != depot_idx):
         return False
 
-    # (v) 용량 제약 (depot 제외하고 계산)
-    delivery_sum = sum(demands[n] for n in route if n != depot_idx and node_types[n] == 1)
-    pickup_sum   = sum(demands[n] for n in route if n != depot_idx and node_types[n] == 0)
-
-    if delivery_sum > capa:                     # 출발 시 적재 초과
-        return False
-    if pickup_sum > (capa - delivery_sum):      # 회수 총량 > 잔여 공간
-        return False
-
     return True
+
 
 
 def is_solution_feasible(
