@@ -1,5 +1,6 @@
 import random
-
+import time
+random.seed(42)
 
 class Route:
     def __init__(self):
@@ -211,7 +212,8 @@ class Construction:
 
         return True
 
-    def construct(self):
+    def construct(self, time_limit=60):
+        start = time.time()
         while True:
             constructionType = random.random() < 0.7
             if constructionType:
@@ -220,4 +222,8 @@ class Construction:
                 foundSolution = self.sequential_strategy()
             if foundSolution:
                 break
+            if foundSolution:
+                break
+            if time.time() - start > time_limit:
+                raise TimeoutError(f"construct() exceeded {time_limit}s")
 
