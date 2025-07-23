@@ -1,13 +1,6 @@
-import math
 import random
 
-def calculate_distance(x, y, node2):
-    return math.sqrt((x - node2['x'])**2 + (y - node2['y'])**2)
-
-def calculate_distance2(node1, node2):
-    return math.sqrt((node1['x'] - node2['x'])**2 + (node1['y'] - node2['y'])**2)
-
-def calculate_total_cost(nodes, solution):
+def calculate_total_cost(solution, Cost_matrix):
 
         total_cost = 0
         # 1. 전체 경로 리스트를 하나씩 순회합니다.
@@ -22,12 +15,13 @@ def calculate_total_cost(nodes, solution):
                 # 3. 경로 내의 현재 노드와 다음 노드 간의 거리를 누적합니다.
                 from_node = route[i]
                 to_node = route[i+1]
-                current_route_cost += calculate_distance2(nodes[from_node], nodes[to_node])
-            
+                # print(f"from_node: {from_node}, to_node: {to_node}")
+                current_route_cost += Cost_matrix[from_node][to_node]
             # 4. 계산된 경로 비용을 총비용에 더합니다.
             total_cost += current_route_cost
             
         return total_cost
+
 
 def route_load(nodes, route, linehaul=True, NUM_LINEHAUL=10):
     """주어진 경로의 총 수요(load)를 계산합니다."""
@@ -37,78 +31,71 @@ def route_load(nodes, route, linehaul=True, NUM_LINEHAUL=10):
     
     return sum(nodes[customer]['demand'] for customer in route if (customer != 0) and (customer > NUM_LINEHAUL))
 
-def init_solution(nodes, NUM_VEHICLES, CAPACITY):
-    routes = [[] for _ in range(NUM_VEHICLES)]
-    linehaul_nodes = [node for node in nodes if node['type'] == 'linehaul']
-    backhaul_nodes = [node for node in nodes if node['type'] == 'backhaul']
 
-    # Start from the depot (node 0)
-    for i in range(NUM_VEHICLES):
+def init_solution(nodes, NUM_VEHICLES, CAPACITY, cost_matrix):
+    """
+    Greedy Insertion 방식으로 모든 고객을 포함하는 고품질 초기 해를 생성합니다.
+    (IndexError 수정 완료)
+    """
+    customers = [node['id'] for node in nodes if node['id'] != 0]
+    # 라인홀 고객을 먼저 배정하기 위해 정렬
+    customers.sort(key=lambda c: nodes[c]['type'] == 'backhaul')
 
-        routes[i].append(0)
-        current_load = 0
-        current_load += nodes[0]['demand']  # Depot has no demand, so this should be 0
-        current_x = nodes[0]['x']
-        current_y = nodes[0]['y']
-        # 1. 'linehaul' 타입인 노드들만 필터링
-        
-        
-        while current_load < CAPACITY:
-            minist_dist_linehaul = math.inf
-            min_demand_linehaul_node = None
-            for node in linehaul_nodes:
-                min_dist_linehaul= calculate_distance(current_x, current_y, node)
-                if min_dist_linehaul < minist_dist_linehaul:
-                    minist_dist_linehaul = min_dist_linehaul
-                    min_demand_linehaul_node = node
-            # 2. 가장 가까운 라인홀 노드 선택
-            if min_demand_linehaul_node and current_load + min_demand_linehaul_node['demand'] <= CAPACITY:
-                routes[i].append(min_demand_linehaul_node['id'])
-                current_load += min_demand_linehaul_node['demand']
-                current_x = min_demand_linehaul_node['x']
-                current_y = min_demand_linehaul_node['y']
-                linehaul_nodes.remove(min_demand_linehaul_node)
-                # print("\n[결과] 수요(demand)가 가장 작은 라인홀 노드:")
-                # print(min_demand_linehaul_node)
-            else:
-                # print(f"\n[경고] 차량 {i+1}의 라인홀 노드가 부족합니다. 현재 수요량: {current_load}, 최대 용량: {CAPACITY}")
-                break
+    routes = [[0, 0] for _ in range(NUM_VEHICLES)]
 
-        current_load = 0  # Reset current load for the next vehicle
-        # 3. 'backhaul' 타입인 노드들만 필터링
-        
-      
-        while current_load < CAPACITY:
-            minist_dist_backhaul = math.inf
-            min_demand_backhaul_node = None
-            for node in backhaul_nodes:
-                min_dist_backhaul = calculate_distance(current_x, current_y, node)
-                if min_dist_backhaul < minist_dist_backhaul:
-                    minist_dist_backhaul = min_dist_backhaul
-                    min_demand_backhaul_node = node
-            # 4. 가장 가까운 백홀 노드 선택
-            if min_demand_backhaul_node and current_load + min_demand_backhaul_node['demand'] <= CAPACITY:
-                routes[i].append(min_demand_backhaul_node['id'])
-                current_load += min_demand_backhaul_node['demand']
-                current_x = min_demand_backhaul_node['x']
-                current_y = min_demand_backhaul_node['y']
-                backhaul_nodes.remove(min_demand_backhaul_node)
-                # print("\n[결과] 수요(demand)가 가장 작은 백홀 노드:")
-                # print(min_demand_backhaul_node)
-            else:
-                # print(f"\n[경고] 차량 {i+1}의 벡홀 노드가 부족합니다. 현재 수요량: {current_load}, 최대 용량: {CAPACITY}")
-                break
-        routes[i].append(0)
+    for cust_id in customers:
+        best_insertion = {'cost': float('inf'), 'route_idx': -1, 'pos': -1}
 
+        for i, route in enumerate(routes):
+            # 루프 범위를 수정하여 IndexError를 해결합니다.
+            for j in range(1, len(route)):
+                potential_route = route[:j] + [cust_id] + route[j:]
+
+                # 1. 용량 제약 검사
+                linehaul_demand = sum(nodes[c]['demand'] for c in potential_route if nodes[c]['type'] == 'linehaul')
+                backhaul_demand = sum(nodes[c]['demand'] for c in potential_route if nodes[c]['type'] == 'backhaul')
+                if linehaul_demand > CAPACITY or backhaul_demand > CAPACITY:
+                    continue
+
+                # 2. 순서 제약 검사 (L-B)
+                is_backhaul_started = False
+                valid_order = True
+                for node_id in potential_route[1:-1]:
+                    if nodes[node_id]['type'] == 'backhaul':
+                        is_backhaul_started = True
+                    if nodes[node_id]['type'] == 'linehaul' and is_backhaul_started:
+                        valid_order = False
+                        break
+                if not valid_order:
+                    continue
+                
+                # 3. 백홀 제약 검사 (라인홀 없이 백홀만 존재 불가)
+                if backhaul_demand > 0 and linehaul_demand == 0:
+                    continue
+
+                # 비용 증가 계산
+                prev_node = potential_route[j-1]
+                next_node = potential_route[j+1]
+                cost_increase = cost_matrix[prev_node][cust_id] + cost_matrix[cust_id][next_node] - cost_matrix[prev_node][next_node]
+
+                if cost_increase < best_insertion['cost']:
+                    best_insertion = {'cost': cost_increase, 'route_idx': i, 'pos': j}
+
+        if best_insertion['route_idx'] != -1:
+            r_idx, pos = best_insertion['route_idx'], best_insertion['pos']
+            routes[r_idx].insert(pos, cust_id)
+
+    # print(f"초기 해 생성 완료. 포함된 고객 수: {sum(1 for r in routes for c in r if c != 0)}")
     return routes
 
-
 class destroy_solution:
-    def __init__(self, nodes, NUM_VEHICLES, CAPACITY):
+    def __init__(self, nodes, NUM_VEHICLES, CAPACITY, Cost_matrix):
         self.nodes = nodes
         self.NUM_VEHICLES = NUM_VEHICLES
         self.CAPACITY = CAPACITY
+        self.Cost_matrix = Cost_matrix
 
+        
     def random_removal(self, current_routes , num_to_remove=1):
         all_customers = [
         customer for route in current_routes for customer in route if customer != 0
@@ -134,10 +121,10 @@ class destroy_solution:
                 customer_node = route[i]
                 next_node = route[i+1]
                 
-                # 해당 고객을 제거했을 때 줄어드는 거리(비용) 계산
-                cost_saving = (calculate_distance2(self.nodes[prev_node], self.nodes[customer_node]) +
-                               calculate_distance2(self.nodes[customer_node], self.nodes[next_node]) -
-                               calculate_distance2(self.nodes[prev_node], self.nodes[next_node]))
+                cost_saving = (self.Cost_matrix[prev_node][customer_node] +
+                               self.Cost_matrix[customer_node][next_node] -
+                               self.Cost_matrix[prev_node][next_node])
+                
                 costs.append((cost_saving, customer_node))
 
         # 비용이 큰 순서대로 정렬
@@ -188,13 +175,13 @@ class destroy_solution:
         return new_solution, removed_list
     
 class repair_solution:
-    def __init__(self, nodes, NUM_VEHICLES, CAPACITY, NUM_LINEHAUL, NUM_BACKHAUL):
+    def __init__(self, nodes, NUM_VEHICLES, CAPACITY, NUM_LINEHAUL, NUM_BACKHAUL, Cost_matrix):
         self.nodes = nodes
         self.NUM_VEHICLES = NUM_VEHICLES
         self.CAPACITY = CAPACITY
         self.NUM_LINEHAUL = NUM_LINEHAUL
         self.NUM_BACKHAUL = NUM_BACKHAUL
-
+        self.Cost_matrix = Cost_matrix
 
     def is_route_valid(self, route):
         """
@@ -222,6 +209,10 @@ class repair_solution:
         if backhaul_demand > self.CAPACITY:
             return False
         
+        # 4. linehaul이 최소한 하나의 경로가 있어야 한다는 제약
+        if backhaul_demand > 0 and linehaul_demand == 0:
+            return False
+    
         # 모든 제약을 통과하면 유효
         return True
 
@@ -242,9 +233,9 @@ class repair_solution:
                     if not self.is_route_valid(potential_route):
                         continue
                     
-                    cost_increase = calculate_distance2(self.nodes[potential_route[j-1]], self.nodes[customer]) + \
-                                    calculate_distance2(self.nodes[customer], self.nodes[potential_route[j+1]]) - \
-                                    calculate_distance2(self.nodes[potential_route[j-1]], self.nodes[potential_route[j+1]])
+                    cost_increase = self.Cost_matrix[potential_route[j-1]][customer] + \
+                                    self.Cost_matrix[customer][potential_route[j+1]] - \
+                                    self.Cost_matrix[potential_route[j-1]][potential_route[j+1]]
                     
                     if cost_increase < best_insertion['cost_increase']:
                         best_insertion.update({'cost_increase': cost_increase, 'route_idx': i, 'pos': j, 'is_new': False})
@@ -252,12 +243,15 @@ class repair_solution:
             # 옵션 B: 새 차량에 배차
             potential_new_route = [0, customer, 0]
             if self.is_route_valid(potential_new_route):
-                new_route_cost = 2 * calculate_distance2(self.nodes[0], self.nodes[customer])
+                # new_route_cost = 2 * calculate_distance2(self.nodes[0], self.nodes[customer])
+                new_route_cost = 2 * self.Cost_matrix[0][customer]
                 if new_route_cost < best_insertion['cost_increase']:
                     best_insertion.update({'cost_increase': new_route_cost, 'route_idx': -1, 'is_new': True})
 
             # 최종 결정에 따라 삽입 실행
-            if best_insertion['route_idx'] != -1:
+            if best_insertion['cost_increase'] != float('inf'):
+                
+                # 2. 유효한 위치를 찾았다면, 그제야 '새 경로'인지 '기존 경로'인지 확인합니다.
                 if best_insertion['is_new']:
                     # 첫 번째 비어있는 경로를 찾아 할당
                     for i, route in enumerate(repaired_solution):
@@ -266,6 +260,7 @@ class repair_solution:
                             break
                 else:
                     repaired_solution[best_insertion['route_idx']].insert(best_insertion['pos'], customer)
+    
 
         # --- 2. Backhaul 고객 삽입 ---
         for customer in back_nodes:
@@ -276,10 +271,10 @@ class repair_solution:
                     potential_route = route[:j] + [customer] + route[j:]
                     if not self.is_route_valid(potential_route):
                         continue
-
-                    cost_increase = calculate_distance2(self.nodes[potential_route[j-1]], self.nodes[customer]) + \
-                                    calculate_distance2(self.nodes[customer], self.nodes[potential_route[j+1]]) - \
-                                    calculate_distance2(self.nodes[potential_route[j-1]], self.nodes[potential_route[j+1]])
+                    
+                    cost_increase = self.Cost_matrix[potential_route[j-1]][customer] + \
+                                    self.Cost_matrix[customer][potential_route[j+1]] - \
+                                    self.Cost_matrix[potential_route[j-1]][potential_route[j+1]]
 
                     if cost_increase < best_insertion['cost_increase']:
                         best_insertion.update({'cost_increase': cost_increase, 'route_idx': i, 'pos': j})
@@ -287,13 +282,14 @@ class repair_solution:
             # Backhaul은 새 경로를 만들지 않으므로, 유효한 자리가 있을 때만 삽입
             if best_insertion['route_idx'] != -1:
                 repaired_solution[best_insertion['route_idx']].insert(best_insertion['pos'], customer)
-                
+
+        # print(sum(1 for route in repaired_solution for customer in route if customer != 0))        
         return repaired_solution
     
     def regret_insertion(self, new_solution, removed_list):
         repaired_solution = [route[:] for route in new_solution]
         customers_to_insert = list(removed_list)
-
+        customers_to_insert = sorted(customers_to_insert)
         while customers_to_insert:
             regret_values = []
 
@@ -307,16 +303,18 @@ class repair_solution:
                     for j in range(1, len(route)):
                         potential_route = route[:j] + [customer] + route[j:]
                         if self.is_route_valid(potential_route):
-                            cost_increase = calculate_distance2(self.nodes[potential_route[j-1]], self.nodes[customer]) + \
-                                            calculate_distance2(self.nodes[customer], self.nodes[potential_route[j+1]]) - \
-                                            calculate_distance2(self.nodes[potential_route[j-1]], self.nodes[potential_route[j+1]])
+
+                            cost_increase = self.Cost_matrix[potential_route[j-1]][customer] + \
+                                            self.Cost_matrix[customer][potential_route[j+1]] - \
+                                            self.Cost_matrix[potential_route[j-1]][potential_route[j+1]]
                             insert_costs.append({'cost': cost_increase, 'route_idx': i, 'pos': j, 'is_new': False})
 
                 # 옵션 B: 새 차량에 배차 (Linehaul 고객만 가능)
                 if self.nodes[customer]['type'] == 'linehaul':
                     potential_new_route = [0, customer, 0]
                     if self.is_route_valid(potential_new_route):
-                        new_route_cost = 2 * calculate_distance2(self.nodes[0], self.nodes[customer])
+                        # new_route_cost = 2 * calculate_distance2(self.nodes[0], self.nodes[customer])
+                        new_route_cost = 2 * self.Cost_matrix[0][customer]
                         # 새 경로 옵션은 비어있는 어떤 경로든 가능하므로, route_idx는 -1로 표시
                         insert_costs.append({'cost': new_route_cost, 'route_idx': -1, 'is_new': True})
 
@@ -346,17 +344,18 @@ class repair_solution:
                 repaired_solution[info['route_idx']].insert(info['pos'], cust_id)
             
             customers_to_insert.remove(cust_id)
-            
+        # print(sum(1 for route in repaired_solution for customer in route if customer != 0))
         return repaired_solution
                 
     def random_insertion(self, new_solution, removed_list):
+        # print(f"removed_list: {removed_list}")
         repaired_solution = [route[:] for route in new_solution]
         customers_to_insert = list(removed_list)
-        random.shuffle(customers_to_insert)
-
+        customers_to_insert = sorted(customers_to_insert)
+        # print(f"customers_to_insert: {customers_to_insert}")
         for customer in customers_to_insert:
             possible_insertions = []
-
+            # print(f"customer: {customer}")
             # --- 모든 유효한 삽입 위치를 찾습니다 ---
             # 옵션 A: 기존 경로에 삽입
             for i, route in enumerate(repaired_solution):
@@ -372,16 +371,22 @@ class repair_solution:
                     # 새 경로 옵션은 비어있는 어떤 경로든 가능하므로, route_idx는 -1로 표시
                     possible_insertions.append({'route_idx': -1, 'is_new': True})
 
+            # print(f"possible_insertions: {possible_insertions}")
+
             # 3. 유효한 위치 중 하나를 무작위로 선택하여 실행
             if possible_insertions:
                 chosen_option = random.choice(possible_insertions)
-                
+                # print(f"chosen_option: {chosen_option}")
                 if chosen_option['is_new']:
                     for i, r in enumerate(repaired_solution):
+                        # print(r)
                         if len(r) <= 2:
                             repaired_solution[i] = [0, customer, 0]
-                            break
                 else:
                     repaired_solution[chosen_option['route_idx']].insert(chosen_option['pos'], customer)
-
+            # print(f"삽입 후 경로: {repaired_solution}")
+            # print(f"삽입 후 경로 길이: {sum(1 for route in repaired_solution for customer in route if customer != 0)}")
+   
+        # print(sum(1 for route in repaired_solution for customer in route if customer != 0))
         return repaired_solution
+    
