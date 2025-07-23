@@ -1,7 +1,5 @@
 import random
 import numpy
-from functools import reduce
-import math
 from OSM_util import get_distance, two_opt
 
 class ACO_VRPB:
