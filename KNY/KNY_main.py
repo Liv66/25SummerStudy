@@ -471,4 +471,4 @@ def run_kjh_problem(problem_path: Path):
 
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parents[1]
-    run_kjh_problem(ROOT / "instances" / "problem_20_0.7.json")
+    run_kjh_problem(ROOT / "instances" / "problem_30_0.7.json")
