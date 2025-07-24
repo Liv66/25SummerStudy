@@ -98,8 +98,11 @@ def run_sscflp_vrpb(time_left, capacities, depot_idx, depot_coord, linehaul_ids,
         facility_coords = [tuple(coord) for coord in clipped_samples]
 
         transport_cost = [[euclidean(customer_coords[i], facility_coords[j]) for j in range(m)] for i in range(nn)]
+        if nn > 200:
+            time_limit = max(0.1, time_left)
+        else:
+            time_limit = nn*0.02
 
-        time_limit = max(0.1, time_left)
         model = gp.Model("SSCFLP")
         model.setParam("OutputFlag", 0)
         model.setParam("TimeLimit", time_limit)
@@ -122,22 +125,32 @@ def run_sscflp_vrpb(time_left, capacities, depot_idx, depot_coord, linehaul_ids,
 
         model.optimize()
 
+        if model.SolCount == 0:
+            print("❌ No solution found for SSCFLP.")
+            return [], [[] for _ in range(m)]
+
         assigned_customers = [[] for _ in range(m)]
         for i in range(nn):
             for j in range(m):
-                if x[i, j].X > 0.5:
+                if x[i, j].X > 0.6:
                     assigned_customers[j].append(customer_idx[i])
+
         return facility_coords, assigned_customers
 
+    time_left2 = time_left
     while True:
-        s = time.time()
-        facility_linehaul, assigned_linehaul = SSCFLP(time_left, linehaul_coord, linehaul_ids, kde_linehaul, mins_linehaul,
+        start = time.time()
+        facility_linehaul, assigned_linehaul = SSCFLP(time_left/2, linehaul_coord, linehaul_ids, kde_linehaul, mins_linehaul,
                                                   maxs_linehaul)
-        time_left2 = s - time.time()
+        elapsed = time.time() - start
+        time_left2 = time_left2 - elapsed  # ✅ 수정: 실제 남은 시간
         facility_backhaul, assigned_backhaul = SSCFLP(time_left2, backhaul_coord, backhaul_ids, kde_backhaul, mins_backhaul,
                                                   maxs_backhaul)
 
         nonempty_linehaul_idx = [i for i, group in enumerate(assigned_linehaul) if group]
+        if len(nonempty_linehaul_idx) == 0:
+            continue
+
         nonempty_backhaul_idx = [j for j, group in enumerate(assigned_backhaul) if group]
         if len(nonempty_linehaul_idx) >= len(nonempty_backhaul_idx):
             break
@@ -248,12 +261,16 @@ def Iteration_VRPB(problem_info, time_limit, start_time, capacities, depot_idx, 
     #    best_assigned_customers = None
     best_routes = None
     # i = 0
+    time_left = time_limit
     while True:
-        time_left = time_limit - time.time()
+        start_t = time.time()
         total_cost, routes = run_sscflp_vrpb(time_left, capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord,
                                              backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul,
                                              kde_backhaul, mins_backhaul, maxs_backhaul, n, m, vehicle_capacity,
                                              demands, node_types, coords_dict, dist_matrix)
+
+        elapsed_time = time.time() - start_t
+        time_left = time_left - elapsed_time
 
         if check_feasible_wb(problem_info, routes, 0, 1) == 0:
             continue
@@ -326,11 +343,11 @@ def check_feasible_wb(problem_info, sol, elapsed, timelimit):
     dist_mat = problem_info['dist_mat']
 
     if elapsed > timelimit + 1:
-        print("Time Out")
+        #print("Time Out")
         return 0
 
     if len(sol) > K:
-        print(f"vehicle 수는 {K}대까지 사용 가능합니다. 현재 : {len(sol)}")
+        #print(f"vehicle 수는 {K}대까지 사용 가능합니다. 현재 : {len(sol)}")
         return 0
 
     total_cost = 0
@@ -339,14 +356,14 @@ def check_feasible_wb(problem_info, sol, elapsed, timelimit):
 
     for idx, route in enumerate(sol):
         if route[0] != 0:
-            print(f"depot에서 출발해야 합니다. {idx}번째 차량 경로 {route}")
+            #print(f"depot에서 출발해야 합니다. {idx}번째 차량 경로 {route}")
             return 0
 
         if route[-1] != 0:
-            print(f"depot으로 도착해야 합니다. {idx}번째 차량 경로 {route}")
+            #print(f"depot으로 도착해야 합니다. {idx}번째 차량 경로 {route}")
             return 0
         if node_type[route[1]] == 2:
-            print(f"차량은 backhaul만 갈 수 없습니다. {idx}번째 차량 경로 {route}")
+            #print(f"차량은 backhaul만 갈 수 없습니다. {idx}번째 차량 경로 {route}")
             return 0
         cost = 0
         load = 0
@@ -358,29 +375,29 @@ def check_feasible_wb(problem_info, sol, elapsed, timelimit):
         for i in range(1, len(route) - 1):
             nxt = route[i]
             if visit[nxt]:
-                print(f"{nxt} 노드 2번 이상 방문")
+                #print(f"{nxt} 노드 2번 이상 방문")
                 return 0
             visit[nxt] = 1
             cost += dist_mat[pre][nxt]
             load += node_demand[nxt]
             route_type[i] = node_type[nxt]
             if nxt == 0:
-                print(f"{idx}번째 차량 depot을 3번 이상 방문 {route}")
+                #print(f"{idx}번째 차량 depot을 3번 이상 방문 {route}")
                 return 0
 
             if node_type[pre] == 1 and node_type[nxt] == 2:
                 if flag:
-                    print(f"{idx}번째 차량 line -> backhaul -> line 경로 존재")
-                    print(node_type)
+                    #print(f"{idx}번째 차량 line -> backhaul -> line 경로 존재")
+                    #print(node_type)
                     return 0
                 flag = True
                 load = 0
 
             if load > capa:
-                if flag:
-                    print(f"{idx}번째 차량의 line 용량 초과 {load}, {capa}")
-                else:
-                    print(f"{idx}번째 차량의 back 용량 초과 {load}, {capa}")
+                # if flag:
+                #     #print(f"{idx}번째 차량의 line 용량 초과 {load}, {capa}")
+                # else:
+                #     #print(f"{idx}번째 차량의 back 용량 초과 {load}, {capa}")
                 return 0
             pre = nxt
         cost += dist_mat[pre][0]
@@ -388,7 +405,7 @@ def check_feasible_wb(problem_info, sol, elapsed, timelimit):
 
     if sum(visit) < len(node_type):
         yet_visit = [i for i in range(len(node_type)) if not visit[i]]
-        print(f"다음 노드들을 방문하지 않았습니다. {yet_visit}")
+        #print(f"다음 노드들을 방문하지 않았습니다. {yet_visit}")
         return 0
 
     return total_cost

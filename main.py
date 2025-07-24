@@ -2,10 +2,10 @@ import json
 import random
 import time
 
+
 from KJH.KJH_main import KJH_run
 from PWB.PWB_main import PWB_run
-from PWB.PWB_vrpb import check_feasible_wb, plot_vrpb_wb
-
+from util import *
 
 #
 # from PWB.PWB_vrpb import check_feasible_wb, plot_vrpb_wb
@@ -46,12 +46,11 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 NN = 500
 CP = 3000
 line_p = 0.7
-instance_generator(f"./instances/problem_{NN}_{line_p}.json", NN, CP, line_p=0.7)
+#instance_generator(f"./instances/problem_{NN}_{line_p}.json", NN, CP, line_p=0.7)
 print("done")
 
-def main(NN, CP):
+def main(NN, CP, line_p):
     N = NN
-    line_p = 0.7
     capa = CP
     time_limit = 60
     problem = f"./instances/problem_{N}_{line_p}.json"
@@ -72,10 +71,10 @@ def main(NN, CP):
         sol = fu(problem_info)
         elapsed = round(time.time() - start, 2)
 
-        obj = check_feasible_wb(problem_info, sol, elapsed, time_limit)
+        obj = check_feasible(problem_info, sol, elapsed, time_limit)
         print(obj, elapsed)
-        plot_vrpb_wb(problem_info, sol, f'obj : {obj} elapsed : {elapsed}')
+        plot_vrpb(problem_info, sol, f'obj : {obj} elapsed : {elapsed}')
 
 
 if __name__ == '__main__':
-    main(NN, CP)
+    main(NN, CP, line_p)
