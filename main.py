@@ -9,7 +9,7 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
     # 인덱스 0은 depot
     problem_info = {}
     nodes_coord = [(12000, 16000)] + [(random.uniform(0, 24000), random.uniform(0, 32000)) for _ in range(N - 1)]
-    demands = [0] + [int(random.gauss(500, 200)) for _ in range(N - 1)]
+    demands = [0] + [max(abs(int(random.gauss(500, 200))), 10) for _ in range(N - 1)]
 
     num_line = int(N * line_p)
     node_type = [2 for _ in range(N)]
@@ -20,7 +20,7 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
     line_K = bin_packing([demands[i] for i in range(N) if node_type[i] == 1], capa)  # 차량 수
     back_K = bin_packing([demands[i] for i in range(N) if node_type[i] == 2], capa)
-    K = max(line_K, back_K)
+    K = max(line_K, back_K) + 1
     dist_mat = get_distance(nodes_coord)  # 거리 행렬 계산
 
     problem_info['N'] = N
@@ -36,26 +36,32 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
 
 def main():
-    N = 40
-    line_p = 0.6
-    capa = 2000
-    time_limit = 60
-    problem = f"instances/problem_{N}_{line_p}.json"
-    try:
-        with open(problem, "r", encoding='utf-8') as f:
-            problem_info = json.load(f)
+    N_list = [50, 70, 100, 130, 150]
+    line_p_list = [0.5, 0.7, 0.85]
 
-    except FileNotFoundError:
-        instance_generator(problem, N=N, line_p=line_p, capa=capa)
-        with open(problem, "r", encoding='utf-8') as f:
-            problem_info = json.load(f)
-    start = time.time()
-    sol = KJH_run(problem_info, time_limit)
-    elapsed = round(time.time() - start, 2)
+    capa = 3200
 
-    obj = check_feasible(problem_info, sol, elapsed, time_limit)
-    print(obj, elapsed)
-    plot_vrpb(problem_info, sol, f'obj : {obj} elapsed : {elapsed}')
+    for N in N_list:
+        for line_p in line_p_list:
+            title = f"problem_{N}_{line_p}"
+            time_limit = 60
+            problem = f"instances/problem_{N}_{line_p}.json"
+            try:
+                with open(problem, "r", encoding='utf-8') as f:
+                    problem_info = json.load(f)
+
+            except FileNotFoundError:
+                instance_generator(problem, N=N, line_p=line_p, capa=capa)
+                with open(problem, "r", encoding='utf-8') as f:
+                    problem_info = json.load(f)
+            print("------------------------")
+            start = time.time()
+            sol = KJH_run(problem_info, time_limit)
+            elapsed = round(time.time() - start, 2)
+
+            obj = check_feasible(problem_info, sol, elapsed, time_limit)
+            print(title, obj, elapsed)
+    # plot_vrpb(problem_info, sol, f'obj : {obj} elapsed : {elapsed}')
 
 
 if __name__ == '__main__':

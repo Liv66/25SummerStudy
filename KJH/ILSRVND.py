@@ -659,10 +659,11 @@ class ILS_RVND:
         no_improve = 0
         pert_iter = 0
         for i in range(Maxiter):
-            if log:
-                print(f"ILS iter {i}")
-            MaxIterILS = 50
+            MaxIterILS = 40
             iterILS = 0
+            if log:
+                print("LOG", spool.best_cost, spool.current_best_cost, spool.current_cost, no_improve, pert_min,
+                      pert_max)
             while iterILS < MaxIterILS:
                 self.run_rvnd(spool)
                 if time.time() - start > time_limit - 5:
@@ -675,8 +676,7 @@ class ILS_RVND:
 
                 # accept할지 안할지...
                 if spool.current_cost < spool.current_best_cost:
-                    if log:
-                        print("current best 개선", spool.current_best_cost, spool.current_cost)
+                    no_improve = 0
                     spool.current_best_cost = spool.current_cost
                     spool.current_best_sol = copy.deepcopy(spool.current_sol)
                     iterILS = 0
@@ -695,20 +695,20 @@ class ILS_RVND:
             else:
                 no_improve += 1
                 pert_iter += 1
-                if no_improve >= 10 and pert_iter <= 5:
+                if no_improve >= 5 >= pert_iter:
                     pert_min = min(pert_min + 1, ub_min)
                     pert_max = min(pert_max + 1, up_max)
                     pert_iter = 0
 
             if end_flag:
-                opt_result, obj = solv_SC(spool, self.dist_mat, N, self.K, log=True)
+                opt_result, obj = solv_SC(spool, self.dist_mat, N, self.K, log=log)
                 spool.best_cost = obj
                 # print(opt_result)
                 spool.best_sol = [spool.make_sol(route, spool.cost_hash[spool.get_hash(route)]) for route in opt_result]
                 return
 
-            if not i % 10:
-                opt_result, obj = solv_SC(spool, self.dist_mat, N, self.K, log=True)
+            if not i % 5:
+                opt_result, obj = solv_SC(spool, self.dist_mat, N, self.K, log=log)
                 if obj < spool.best_cost:
                     no_improve = 0
                     spool.best_cost = obj
@@ -717,18 +717,15 @@ class ILS_RVND:
                                       opt_result]
                     spool.reset()
 
-                else:
-                    if no_improve > 20:
-                        spool.current_sol = copy.deepcopy(spool.best_sol)
-                        spool.current_cost = spool.best_cost
-                        self.perturbation(spool, 2, 5)
-                        self.run_rvnd(spool)
-                        spool.current_best_sol = copy.deepcopy(spool.current_sol)
-                        spool.current_best_cost = spool.current_cost
-                    elif no_improve > 40:
-                        spool.current_sol = copy.deepcopy(spool.best_sol)
-                        spool.current_cost = spool.best_cost
-                        self.perturbation(spool, 10, 20)
-                        self.run_rvnd(spool)
-                        spool.current_best_sol = copy.deepcopy(spool.current_sol)
-                        spool.current_best_cost = spool.current_cost
+            if no_improve > 10:
+                no_improve = 0
+                reset_sol = self.construct()
+
+                total_cost = sum(route.cost for route in reset_sol)
+                spool.current_best_sol = copy.deepcopy(reset_sol)
+                spool.current_best_cost = total_cost
+                spool.current_sol = reset_sol
+                spool.current_cost = total_cost
+
+                for i in range(len(reset_sol)):
+                    spool.add_pool(reset_sol[i].hist, reset_sol[i].cost)
