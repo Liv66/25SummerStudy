@@ -1,5 +1,6 @@
 # cwj_main.py
 import json
+import time
 from cwj_master_problem import solve_master_problem
 from cwj_initial_patterns import generate_initial_patterns
 from cwj_dual_route_generator import generate_dual_routes
@@ -89,4 +90,9 @@ def cwj_main(problem_info):
 if __name__ == '__main__':
     with open('/Users/michael/Desktop/RiskLAB./Study/25SummerStudy/instances/problem_20_0.7.json', 'r') as f:
         instance = json.load(f)
+    
+    start_time = time.time() 
     cwj_main(instance)
+    end_time = time.time()
+    elapsed = end_time - start_time
+    print(f"\n실행 시간: {elapsed:.2f}초")
