@@ -23,7 +23,6 @@ class Construction:
         self.node_type = node_type
         self.node_demand = node_demand
         self.dist_mat = dist_mat
-        self.routes = []
 
     def parallel_insertion(self, routes, cl, isLine):
         cheapestInsertion = random.random() < 0.5
@@ -93,7 +92,8 @@ class Construction:
                     pre, suc = routes[k].hist[pos - 1], routes[k].hist[pos]
                     if cheapestInsertion:
                         # 정교한 비용, Cheapest Feasible Insertion Criterion
-                        insertion_cost = self.dist_mat[pre][node] + self.dist_mat[node][suc] - self.dist_mat[pre][suc] - 2 * gamma * \
+                        insertion_cost = self.dist_mat[pre][node] + self.dist_mat[node][suc] - self.dist_mat[pre][
+                            suc] - 2 * gamma * \
                                          self.dist_mat[0][node]
                     else:
                         # 가까운 거리 비용, Nearest Feasible Insertion Criterion
@@ -147,7 +147,7 @@ class Construction:
 
         line_flag = self.sequential_insertion(routes, cl_line, True)
         if line_flag:
-            return False
+            return False, []
 
         used_route = []
         for k in range(self.K):
@@ -158,7 +158,7 @@ class Construction:
 
         back_flag = self.sequential_insertion(used_route, cl_back, False)
         if back_flag:
-            return False
+            return False, []
 
         for k in range(self.K):
             pre = 0
@@ -166,9 +166,7 @@ class Construction:
                 routes[k].cost += self.dist_mat[routes[k].hist[pre]][routes[k].hist[nxt]]
                 pre = nxt
 
-        self.routes = routes
-
-        return True
+        return True, routes
 
     def parallel_strategy(self):
         routes = [Route() for _ in range(self.K)]
@@ -193,7 +191,7 @@ class Construction:
 
         line_flag = self.parallel_insertion(routes, cl_line, True)
         if line_flag:
-            return False
+            return False, []
 
         used_route = []
         for k in range(self.K):
@@ -204,7 +202,7 @@ class Construction:
 
         back_flag = self.parallel_insertion(used_route, cl_back, False)
         if back_flag:
-            return False
+            return False, []
 
         for k in range(self.K):
             pre = 0
@@ -212,19 +210,19 @@ class Construction:
                 routes[k].cost += self.dist_mat[routes[k].hist[pre]][routes[k].hist[nxt]]
                 pre = nxt
 
-        self.routes = routes
+        return True, routes
 
-        return True
-
-    def construct(self):
+    def construct(self, log=False):
+        initial_sol = []
         while True:
             constructionType = random.random() < 0.7
             if constructionType:
-                print("parallel")
-                foundSolution = self.parallel_strategy()
+                if log:
+                    print("parallel")
+                foundSolution, initial_sol = self.parallel_strategy()
             else:
-                print("sequence")
-                foundSolution = self.sequential_strategy()
+                if log:
+                    print("sequence")
+                foundSolution, initial_sol = self.sequential_strategy()
             if foundSolution:
-                break
-
+                return initial_sol

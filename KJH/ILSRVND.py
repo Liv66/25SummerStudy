@@ -29,6 +29,12 @@ class SolPool:
             self.cost_hash[route_hash] = current_sol[i].cost
             self.sol_hash[route_hash] = current_sol[i].hist.copy()
 
+    def reset(self):
+        self.current_best_sol = copy.deepcopy(self.best_sol)
+        self.current_best_cost = self.best_cost
+        self.current_sol = copy.deepcopy(self.best_sol)
+        self.current_cost = self.best_cost
+
     def calculate_current_cost(self):
         self.current_cost = sum(route.cost for route in self.current_sol)
 
@@ -40,6 +46,7 @@ class SolPool:
         if route_hash in self.sol_hash:
             if cost < self.cost_hash[route_hash]:
                 self.cost_hash[route_hash] = cost
+                self.sol_hash[route_hash] = route.copy()
             return
         self.sol_hash[route_hash] = route.copy()
         self.pool.append(route_hash)
@@ -89,8 +96,10 @@ class ILS_RVND:
     def shift(self, spool):
         improved = False
         current_sol = spool.current_sol
-        for i in range(self.K):
-            for j in range(self.K):
+        len_sol = len(current_sol)
+
+        for i in range(len_sol):
+            for j in range(len_sol):
                 if i == j or self.shift_status[i, j] != 0:
                     continue
 
@@ -164,8 +173,9 @@ class ILS_RVND:
     def swap11(self, spool):
         improved = False
         current_sol = spool.current_sol
-        for i in range(self.K):
-            for j in range(i + 1, self.K):
+        len_sol = len(current_sol)
+        for i in range(len_sol):
+            for j in range(i + 1, len_sol):
                 if self.swap11_status[i, j] != 0:
                     continue
 
@@ -255,8 +265,9 @@ class ILS_RVND:
     def swap21(self, spool):
         improved = False
         current_sol = spool.current_sol
-        for i in range(self.K):
-            for j in range(self.K):
+        len_sol = len(current_sol)
+        for i in range(len_sol):
+            for j in range(len_sol):
                 if i == j or self.swap21_status[i, j] != 0:
                     continue
                 swap1_route = current_sol[i]
@@ -356,8 +367,9 @@ class ILS_RVND:
     def swap22(self, spool):
         improved = False
         current_sol = spool.current_sol
-        for i in range(self.K):
-            for j in range(i + 1, self.K):
+        len_sol = len(current_sol)
+        for i in range(len_sol):
+            for j in range(i + 1, len_sol):
                 if self.swap22_status[i, j] != 0:
                     continue
                 swap1_route = current_sol[i]
@@ -583,12 +595,13 @@ class ILS_RVND:
         random.shuffle(intra_nb)
 
         i = 0
+        len_sol = len(spool.current_sol)
         while i < len(inter_nb):
             if inter_nb[i](spool):
                 i = 0
             else:
                 i += 1
-            for k in range(self.K):
+            for k in range(len_sol):
                 if self.improved_route[k]:
                     j = 0
                     while j < len(intra_nb):
@@ -601,12 +614,13 @@ class ILS_RVND:
         spool.calculate_current_cost()
         self.reset_status()
 
-    def perturbation(self, spool):
-        r = random.randint(10, 20)
+    def perturbation(self, spool, pert_min, pert_max):
+        r = random.randint(pert_min, pert_max)
+        len_sol = len(spool.current_sol)
         for i in range(r):
             outer_flag = True
             while outer_flag:
-                a, b = random.sample(range(self.K), 2)
+                a, b = random.sample(range(len_sol), 2)
                 swap1_route, swap2_route = spool.current_sol[a], spool.current_sol[b]
                 for x in range(1, swap1_route.line_idx):
                     inner_flag = True
@@ -638,12 +652,18 @@ class ILS_RVND:
                         break
         spool.calculate_current_cost()
 
-    def run(self, spool, start, time_limit=60, Maxiter=200, log=False):
+    def run(self, N, spool, solv_SC, start, time_limit=60, Maxiter=2000, log=False):
         end_flag = False
-
+        pert_min, pert_max = int(N * 0.1), int(N * 0.2)
+        ub_min, up_max = int(N * 0.2), int(N * 0.3)
+        no_improve = 0
+        pert_iter = 0
         for i in range(Maxiter):
-            MaxIterILS = 50
+            MaxIterILS = 40
             iterILS = 0
+            if log:
+                print("LOG", spool.best_cost, spool.current_best_cost, spool.current_cost, no_improve, pert_min,
+                      pert_max)
             while iterILS < MaxIterILS:
                 self.run_rvnd(spool)
                 if time.time() - start > time_limit - 5:
@@ -656,20 +676,56 @@ class ILS_RVND:
 
                 # accept할지 안할지...
                 if spool.current_cost < spool.current_best_cost:
-                    if log:
-                        print("current best 개선", spool.current_best_cost, spool.current_cost)
+                    no_improve = 0
                     spool.current_best_cost = spool.current_cost
                     spool.current_best_sol = copy.deepcopy(spool.current_sol)
                     iterILS = 0
                 else:
                     spool.current_sol = copy.deepcopy(spool.current_best_sol)
-                self.perturbation(spool)
+                self.perturbation(spool, pert_min, pert_max)
 
                 iterILS += 1
 
             if spool.current_best_cost < spool.best_cost:
                 if log:
                     print("best 개선", spool.best_cost, spool.current_best_cost)
+                no_improve = 0
                 spool.best_cost = spool.current_best_cost
                 spool.best_sol = copy.deepcopy(spool.current_best_sol)
-                if end_flag: return
+            else:
+                no_improve += 1
+                pert_iter += 1
+                if no_improve >= 5 >= pert_iter:
+                    pert_min = min(pert_min + 1, ub_min)
+                    pert_max = min(pert_max + 1, up_max)
+                    pert_iter = 0
+
+            if end_flag:
+                opt_result, obj = solv_SC(spool, self.dist_mat, N, self.K, log=log)
+                spool.best_cost = obj
+                # print(opt_result)
+                spool.best_sol = [spool.make_sol(route, spool.cost_hash[spool.get_hash(route)]) for route in opt_result]
+                return
+
+            if not i % 5:
+                opt_result, obj = solv_SC(spool, self.dist_mat, N, self.K, log=log)
+                if obj < spool.best_cost:
+                    no_improve = 0
+                    spool.best_cost = obj
+                    # print(opt_result)
+                    spool.best_sol = [spool.make_sol(route, spool.cost_hash[spool.get_hash(route)]) for route in
+                                      opt_result]
+                    spool.reset()
+
+            if no_improve > 10:
+                no_improve = 0
+                reset_sol = self.construct()
+
+                total_cost = sum(route.cost for route in reset_sol)
+                spool.current_best_sol = copy.deepcopy(reset_sol)
+                spool.current_best_cost = total_cost
+                spool.current_sol = reset_sol
+                spool.current_cost = total_cost
+
+                for i in range(len(reset_sol)):
+                    spool.add_pool(reset_sol[i].hist, reset_sol[i].cost)
