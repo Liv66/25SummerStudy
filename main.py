@@ -43,7 +43,7 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
     with open(problem, "w", encoding='utf-8') as f:
         json.dump(problem_info, f, ensure_ascii=False, indent=4)
 
-NN = 500
+NN = 100
 CP = 3000
 line_p = 0.7
 #instance_generator(f"./instances/problem_{NN}_{line_p}.json", NN, CP, line_p=0.7)
