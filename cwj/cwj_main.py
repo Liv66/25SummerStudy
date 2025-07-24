@@ -30,6 +30,13 @@ def VRPB_CG_Heuristic(problem_info):
         best_solution, duals, missed_customers = solve_master_problem(route_pool, node_types, dist_mat, K, relax=True)
         best_solution = improve_solution(best_solution, route_pool, node_types, node_demands, dist_mat, Q)
 
+    print("Phase 1 Solution")
+    total_cost = 0
+    for idx, (route, cost) in enumerate(best_solution):
+        print(f"Route {idx+1}: {route} | Cost: {int(cost)}")
+        total_cost += cost
+    print(f"Total Cost before pruning: {int(total_cost)}\n")
+
     # Phase 2: reduced cost route 생성 및 개선 반복
     for _ in range(1):  # 최대 10회 반복
         new_routes = generate_dual_routes(duals, route_pool, node_types, node_demands, dist_mat, Q)
@@ -52,7 +59,6 @@ def VRPB_CG_Heuristic(problem_info):
     best_solution = prune_redundant_customers(best_solution, node_types, node_demands, dist_mat, Q)
 
     return best_solution
-
 
 def cwj_main(problem_info):
     K = problem_info['K']

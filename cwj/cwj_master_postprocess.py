@@ -33,11 +33,7 @@ def generate_augmented_routes(route_pool, missed_customers, Q, node_types, node_
                     remaining.remove(customer)
                     inserted = True
                     inserted_any = True
-                    # print(f"[POSTPROCESS] ✅ Inserted customer {customer} at position {i}")
-                    # print(f"[POSTPROCESS]     → New route: {new_route} | Cost: {new_cost:.2f}")
                     break  # 한 번 삽입되면 다음 customer로 이동
-            # if not inserted:
-            #     print(f"[POSTPROCESS] ❌ Failed to insert customer {customer} into route {current_route}")
 
         # 삽입이 1개라도 되었으면 route 추가
         if inserted_any:
@@ -47,10 +43,6 @@ def generate_augmented_routes(route_pool, missed_customers, Q, node_types, node_
         # 이미 다 삽입했다면 더 돌 필요 없음
         if not remaining:
             break
-
-    if remaining:
-        for c in remaining:
-            print(f"[POSTPROCESS] ⚠️ 최종적으로도 삽입 실패: customer {c}")
 
     return augmented_routes
 
