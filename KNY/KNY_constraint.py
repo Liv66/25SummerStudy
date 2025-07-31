@@ -9,36 +9,41 @@ def is_route_feasible(
     capa: int,
     depot_idx: int,
 ) -> bool:
-    # (i) Depot 출발·복귀
     if route[0] != depot_idx or route[-1] != depot_idx:
         return False
 
-    # (iv) 배송 먼저, 그다음 회수
+    # 배송 먼저, 회수는 뒤에
     seen_pick = False
-    for n in route[1:-1]:  # depot 제외
+    for n in route[1:-1]:
         if node_types[n] == 0:
             seen_pick = True
         elif seen_pick:
-            return False  # 회수 뒤에 배송 등장 → 위배
+            return False  # 회수 뒤에 배송 → 제약 위반
 
-    # (v) 적재량 시뮬레이션
-    load = capa  # 차량은 풀 적재로 출발
+    # ✅ 적재 시뮬레이션: 배송량 누적, 회수 시작 시 초기화 후 회수 누적
+    load = 0
+    in_pickup = False
     for n in route[1:-1]:
-        if node_types[n] == 1:
-            load -= demands[n]   # 배송하면 감소
-            if load < 0:        # 적재량 음수 불가
+        if node_types[n] == 1:  # 배송
+            if in_pickup:
+                return False  # pickup 이후 배송 → 제약 위반
+            load += demands[n]
+            if load > capa:
                 return False
-        else:
-            load += demands[n]    # 회수하면 증가
-            if load > capa:       # 용량 초과 불가
+        else:  # 회수
+            if not in_pickup:
+                in_pickup = True
+                load = 0  # 회수 시작 시 적재 초기화
+            load += demands[n]
+            if load > capa:
                 return False
 
-    # (vi) 적어도 1개는 고객 방문(실제로는 node_types==[]면 N=0아닌 한 여기서는 필요없음)
-    # (vi) 최소 1개의 배송 노드 포함
+    # 최소 1개의 배송 노드는 포함해야 함
     if not any(node_types[n] == 1 for n in route if n != depot_idx):
         return False
 
     return True
+
 
 
 

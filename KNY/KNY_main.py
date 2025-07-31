@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from typing import List
 
-from util import get_distance, plot_cvrp, check_feasible
+from util import get_distance, plot_vrpb, check_feasible
 from KNY_alns import alns_vrpb
 
 random.seed(42)
@@ -75,40 +75,40 @@ cache = None
 # ─────────────────────────────────────────────────────────────
 
 def fast_feasible_check(
-    route: List[int],
-    node_types: List[int],
-    demands: List[int],
-    capa: int,
-    depot_idx: int,
-):
+        route: List[int],
+        node_types: List[int],
+        demands: List[int],
+        capa: int,
+        depot_idx: int,
+) -> bool:
+    # ── 0. 기본 조건 ────────────────────────
     if route[0] != depot_idx or route[-1] != depot_idx:
-        return False  # depot 출발·복귀 확실히 체크
-
-    if len(route) < 3:
+        return False
+    if len(route) < 3:  # depot-node-depot
         return True
-
-    if node_types[route[1]] == 0:  # backhaul부터 시작하면 불가
+    if node_types[route[1]] == 0:  # pickup부터 출발? → 불가
         return False
 
+    # ── 1. 적재량 / 플래그 초기화 ───────────
     load = 0
-    in_pickup = False
+    in_pick = False  # 아직 pickup 구간 아님
 
-    for n in route[1:-1]:
-        if node_types[n] == 1:  # delivery
-            if in_pickup:
-                return False  # pickup 이후 delivery 금지
-            load += demands[n]
-        else:  # pickup
-            if not in_pickup:
-                in_pickup = True
-                load = 0  # pickup 시작 시 적재초기화
-            load += demands[n]
+    # ── 2. 경로 순회 ────────────────────────
+    for prev, curr in zip(route[:-1], route[1:]):
 
-        if load > capa:
+        # 2-1. 구간 전환 감지 (delivery→pickup)
+        if node_types[prev] == 1 and node_types[curr] == 0:
+            if in_pick:  # 두 번째 전환? → infeasible
+                return False
+            in_pick = True
+            load = 0  # ★ 배송 화물 모두 하차
+
+        # 2-2. 현재 노드 적재/하차
+        load += demands[curr]  # delivery든 pickup이든 +demands
+        if load > capa:  # 용량 초과
             return False
 
     return True
-
 
 # ─────────────────────────────────────────────────────────────
 # 2) O(n) 수준 pickup 삽입 탐색 (캐시 활용)
@@ -129,9 +129,11 @@ def find_best_insertion_fast(
     for ridx, r in enumerate(routes):
         deliv_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 1)
         if deliv_load == 0:
-            continue
+            continue  # 회수만 있는 라우트에는 삽입하지 않음
+
+        # ❌ 아래 두 줄 삭제 (불필요한 잘못된 제약)
         pickup_load = sum(demands[v] for v in r[1:-1] if node_types[v] == 0)
-        if pickup_load + demands[pickup_node] > deliv_load:
+        if pickup_load + demands[pickup_node] > capa:
             continue
 
         last_deliv = max((i for i, v in enumerate(r) if v != depot_idx and node_types[v] == 1), default=0)
@@ -302,6 +304,8 @@ def improved_greedy_vrpb(
 # 5) KJH JSON Adapter (변경 없음)
 # ─────────────────────────────────────────────────────────────
 
+
+# 1. convert_kjh_problem 함수 수정
 def convert_kjh_problem(problem_info: dict):
     capa = problem_info["capa"]
     coords = problem_info["node_coords"]
@@ -309,14 +313,22 @@ def convert_kjh_problem(problem_info: dict):
     types_all = problem_info["node_types"]
 
     delivery_idx, pickup_idx = [], []
-    node_types_internal = [0] * len(coords)
+    node_types_internal = [0] * len(coords)  # depot 포함한 전체 크기
     demands_internal = [0] * len(coords)
 
-    for j in range(1, len(coords)):
-        is_delivery = 1 if types_all[j] == 1 else 0
-        node_types_internal[j] = is_delivery
+    # ★ 수정: 인덱스 매핑을 명확히 구분
+    for j in range(1, len(coords)):  # 노드 1부터 시작 (depot 제외)
+        kjh_type = types_all[j]  # KJH 형식: 0=depot, 1=delivery, 2=pickup
+
+        if kjh_type == 1:  # delivery
+            node_types_internal[j] = 1  # internal 형식: 1=delivery
+            delivery_idx.append(j)
+        elif kjh_type == 2:  # pickup
+            node_types_internal[j] = 0  # internal 형식: 0=pickup
+            pickup_idx.append(j)
+        # kjh_type == 0 (depot)은 이미 초기화에서 0으로 설정됨
+
         demands_internal[j] = demands_all[j]
-        (delivery_idx if is_delivery else pickup_idx).append(j)
 
     dist_matrix = problem_info["dist_mat"]
     depot_idx = 0
@@ -328,7 +340,7 @@ def convert_kjh_problem(problem_info: dict):
         capa,
         dist_matrix,
         depot_idx,
-        node_types_internal,
+        node_types_internal,  # 이미 depot 포함한 전체 배열
         coords,
     )
 
@@ -343,8 +355,20 @@ def to_kjh_routes(routes, depot_idx):
     return routes[:]
 
 
+# 2. to_kjh_types 함수 수정
 def to_kjh_types(node_types_internal):
-    return [0] + [1 if t == 1 else 2 for t in node_types_internal]
+    """internal 형식을 KJH 형식으로 변환"""
+    kjh_types = []
+    for i, internal_type in enumerate(node_types_internal):
+        if i == 0:  # depot
+            kjh_types.append(0)
+        elif internal_type == 1:  # delivery
+            kjh_types.append(1)
+        elif internal_type == 0:  # pickup (depot이 아닌 경우)
+            kjh_types.append(2)
+        else:
+            kjh_types.append(2)  # 기본값
+    return kjh_types
 
 
 # ─────────────────────────────────────────────────────────────
@@ -384,8 +408,42 @@ def cross_route_2opt_star(routes, dist, node_types, demands, capa, depot_idx):
     return routes
 
 
+# 3. plot용 데이터 준비 부분 수정 (run_kjh_problem 함수 내)
+def prepare_plot_data(coords, node_types_internal, problem_info):
+    """플롯용 데이터 준비 - 정확한 매핑 보장"""
+
+    # node_types_internal은 이미 depot 포함한 전체 배열이므로 직접 변환
+    kjh_types = to_kjh_types(node_types_internal)
+
+    plot_problem_info = {
+        'node_coords': coords,
+        'node_types': kjh_types,
+        'node_demands': problem_info['node_demands'],
+        'capa': problem_info['capa'],
+        'K': problem_info['K'],
+        'dist_mat': problem_info['dist_mat']
+    }
+
+    # 데이터 일관성 검증
+    coords_len = len(coords)
+    types_len = len(kjh_types)
+
+    print(f"[DEBUG] 매핑 검증:")
+    print(f"  - 좌표 배열 크기: {coords_len}")
+    print(f"  - KJH 타입 배열 크기: {types_len}")
+    print(f"  - 원본 KJH 타입 (처음 10개): {problem_info['node_types'][:10]}")
+    print(f"  - 변환된 KJH 타입 (처음 10개): {kjh_types[:10]}")
+
+    # 타입 매핑 검증
+    if coords_len == types_len:
+        for i in range(min(10, coords_len)):
+            orig_type = problem_info['node_types'][i] if i < len(problem_info['node_types']) else 'N/A'
+            conv_type = kjh_types[i]
+            print(f"  - 노드 {i}: 원본={orig_type} → 변환={conv_type}")
+
+    return plot_problem_info
 # ─────────────────────────────────────────────────────────────
-# 7) 메인 드라이버 (캐시 초기화 추가)
+# 7) 메인 드라이버 (완전히 수정된 버전)
 # ─────────────────────────────────────────────────────────────
 
 def run_kjh_problem(problem_path: Path):
@@ -446,17 +504,40 @@ def run_kjh_problem(problem_path: Path):
     # 캐시를 사용한 최종 비용 계산
     best_cost = sum(cache.get_route_cost(r) for r in best_routes)
 
-    # ── 최종 검증
-    obj = check_feasible(problem_info, to_kjh_routes(best_routes, depot_idx), elapsed, timelimit=60)
+    # ── 최종 검증 (★ 핵심 수정 부분)
+    # check_feasible을 위해 node_types를 KJH 형식으로 변환
+    problem_info_copy = problem_info.copy()  # 원본 보존
+    problem_info_copy["node_types"] = to_kjh_types(node_types)  # ★ 이 줄 활성화!
+
+    obj = check_feasible(problem_info_copy, to_kjh_routes(best_routes, depot_idx), 0, timelimit=60)
     if obj:
         print(f"[✅] check_feasible 통과! obj = {obj:.1f}")
     else:
         print("[❌] check_feasible 실패")
+        # 💡 추가: 어떤 라우트가 실패 원인인지 fast_feasible_check로 디버깅
+        print("\n[🛠 check_feasible 디버깅 시작]")
+        print(f"Internal node_types (0=pickup, 1=delivery): {node_types[:10]}...")
+        print(f"KJH node_types (0=depot, 1=delivery, 2=pickup): {to_kjh_types(node_types)[:10]}...")
+        for r_idx, route in enumerate(best_routes):
+            if not fast_feasible_check(route, node_types, demands, capa, depot_idx):
+                print(f"[❌] Route {r_idx} violates FFC: {route}")
+            else:
+                print(f"[✅] Route {r_idx} passes FFC")
+        print("[🛠 check_feasible 디버깅 끝]\n")
 
     # 캐시 통계 출력
     print(f"[INFO] 캐시 통계 - Route 캐시: {len(cache.cache)}개, 삽입 캐시: {len(cache.insertion_cache)}개")
 
     capa_val = capa  # 편의상 별도 변수
+
+    visited = set(n for r in best_routes for n in r if n != depot_idx)
+    expected = set(i for i in range(len(node_types)) if i != depot_idx)
+    missed = expected - visited
+    if missed:
+        print(f"[❌] check_feasible failed - 미방문 노드: {sorted(missed)}")
+    else:
+        print(f"[✅] 모든 노드 방문 완료")
+
     for k, r in enumerate(best_routes):
         # -------------- 적재율 계산 ------------------ #
         delivery_load = sum(demands[n] for n in r if node_types[n] == 1)
@@ -465,10 +546,11 @@ def run_kjh_problem(problem_path: Path):
         print(f"vehicle {k:2d}: {r}")
         print(f"           ↳ 출발 적재량 = {delivery_load:>6.1f} / {capa_val}  "
               f"(utilisation {utilisation:5.1%})")  # ★
-
-    plot_cvrp(coords, best_routes, f"VRPB obj: {best_cost:.1f}")
+    # 기존 수동 매핑 코드를 다음으로 교체
+    plot_problem_info = prepare_plot_data(coords, node_types, problem_info)
+    plot_vrpb(plot_problem_info, best_routes, f"VRPB obj: {best_cost:.1f}")
 
 
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parents[1]
-    run_kjh_problem(ROOT / "instances" / "problem_30_0.7.json")
+    run_kjh_problem(ROOT / "instances" / "problem_50_0.5.json")
