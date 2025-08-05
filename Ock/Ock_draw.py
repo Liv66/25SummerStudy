@@ -3,7 +3,7 @@ import numpy as np
 
 
 # 결과를 시각화하는 함수
-def draw_routes(nodes, routes):
+def draw_routes(nodes, routes, filename="solution.png"):
     plt.figure(figsize=(12, 12))
     
     # 1. 노드 그리기
@@ -41,8 +41,10 @@ def draw_routes(nodes, routes):
     plt.ylabel('Y Coordinate', fontsize=14)
     plt.legend()
     plt.grid(True)
-    plt.show()
-
+    # plt.show()
+    plt.savefig(filename)  # 그림을 파일로 저장
+    plt.close()  
+    print(f"'{filename}' 파일로 경로 시각화 결과가 저장되었습니다.")
 
 def statistic_result(result, value):
     data_to_plot = []

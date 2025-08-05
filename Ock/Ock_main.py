@@ -7,8 +7,11 @@ import time
 from Ock_draw import *
 import Ock_input_convert as ic
 import pandas as pd
+import os
+import json
+import pandas as pd
 
-def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, stop_no_improvement=1000):
+def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000):
 
     # 파라미터 설정
     nodes, NUM_LINEHAUL, NUM_BACKHAUL, NUM_VEHICLES, CAPACITY = ic.convert_data(problem_info)
@@ -20,7 +23,7 @@ def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rat
     # initial_cost = heu.calculate_total_cost(solution=initial_routes, Cost_matrix = cost_matrix)
 
     # 3. 파괴 및 재구성 객체 생성
-    destroyer = destroy_solution(nodes=nodes, NUM_VEHICLES=NUM_VEHICLES, CAPACITY=CAPACITY, Cost_matrix=cost_matrix)
+    destroyer = destroy_solution(nodes=nodes, NUM_VEHICLES=NUM_VEHICLES, CAPACITY=CAPACITY,  NUM_LINEHAUL=NUM_LINEHAUL, NUM_BACKHAUL=NUM_BACKHAUL, Cost_matrix=cost_matrix)
     repairer = repair_solution(nodes=nodes, NUM_VEHICLES=NUM_VEHICLES, CAPACITY=CAPACITY, NUM_LINEHAUL=NUM_LINEHAUL, NUM_BACKHAUL=NUM_BACKHAUL, Cost_matrix=cost_matrix)
 
     solver = ALNS(
@@ -33,7 +36,7 @@ def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rat
 
     start_time = time.time()
     # ALNS 실행
-    best_routes, best_cost = solver.run(iterations, start_temperature, cooling_rate, max_no_improvement = stop_no_improvement)
+    best_routes, best_cost = solver.run(iterations, start_temperature, cooling_rate, max_no_improvement = max_no_improvement)
     end_time = time.time()
 
     elapsed_time = end_time - start_time
@@ -45,17 +48,42 @@ def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rat
 if __name__ == "__main__":
     # JSON 파일에서 문제 정보 로드
     prob_list = ['problem_20_0.7.json', 'problem_30_0.7.json', 'problem_100_0.7.json']
+    # prob_list = ['problem_100_0.7.json']
+    results_folder = "results"
+    if not os.path.exists(results_folder):
+        os.makedirs(results_folder)
+
+    summary_filename = os.path.join(results_folder, "summary_of_all_results.jsonl")
+    # 'w'(쓰기 모드)로 파일을 열어, 이전 실행 결과가 있다면 덮어쓰도록 함
+    with open(summary_filename, 'w') as f:
+        # 이 with 블록은 파일을 비우는 역할만 합니다.
+        pass
+
     for i in prob_list:
+        print(f"\n--- 문제 '{i}' 처리 중... ---")
         problem_info = ic.load_from_json(rf"instances\{i}")
         
         # Ock_main 함수 실행
-        sol, cost, epalsed_time, nodes = Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, stop_no_improvement=2000)
+        sol, cost, epalsed_time, nodes = Ock_main(problem_info, iterations=1000000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000)
         print(f"\n--- {i} 최종 결과 ---")
         print(f"{i} 총 실행 시간: {epalsed_time:.2f}초")
         print(f"{i} 최종 비용: {cost:.2f}")
         print(f"{i} 최적 경로: {sol}")
         draw_routes(nodes, sol)
 
+        result_entry = {
+            'problem_name': i,
+            'final_cost': cost,
+            'elapsed_time': epalsed_time,
+            'solution_routes': sol # 경로는 문자열로 변환하여 저장
+        }
+
+        with open(summary_filename, 'a') as f:
+            # 딕셔너리를 JSON 문자열로 변환하여 파일에 쓴다
+            f.write(json.dumps(result_entry) + '\n')
+
+        output_filename = os.path.join(results_folder, f"solution_{i.replace('.json', '.png')}")
+        draw_routes(nodes, sol, filename=output_filename)
 
 # 각 node당 30번 반복 실험하려고 만든 코드
 # 실행하고 싶다면 __name__ == "__main__"이 되게
@@ -70,7 +98,7 @@ if __name__ != "__main__":
             problem_info = ic.load_from_json(rf"C:\Users\user\OneDrive - pusan.ac.kr\바탕 화면\옥중석\학교\대학원\여름 방학 스터디\code\{i}")
             
             # Ock_main 함수 실행
-            sol, cost, epalsed_time, nodes = Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, stop_no_improvement=2000)
+            sol, cost, epalsed_time, nodes = Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=2000)
             # print(f"\n--- {i} 최종 결과 ---")
             # print(f"{i} 총 실행 시간: {epalsed_time:.2f}초")
             # print(f"{i} 최종 비용: {cost:.2f}")

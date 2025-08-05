@@ -89,18 +89,29 @@ def init_solution(nodes, NUM_VEHICLES, CAPACITY, cost_matrix):
     return routes
 
 class destroy_solution:
-    def __init__(self, nodes, NUM_VEHICLES, CAPACITY, Cost_matrix):
+    def __init__(self, nodes, NUM_VEHICLES, NUM_LINEHAUL,NUM_BACKHAUL, CAPACITY, Cost_matrix):
         self.nodes = nodes
         self.NUM_VEHICLES = NUM_VEHICLES
+        self.NUM_LINEHAUL = NUM_LINEHAUL
+        self.NUM_BACKHAUL = NUM_BACKHAUL
         self.CAPACITY = CAPACITY
         self.Cost_matrix = Cost_matrix
 
+    def _is_route_valid_after_removal(self, route):
+        # worst_removal에서 사용할 간단한 유효성 검사
+        # 여기서는 "Backhaul만 있는 경로인가?"만 확인하면 됩니다.
+        has_linehaul = any(0 < c <= self.NUM_LINEHAUL for c in route)
+        has_backhaul = any(c > self.NUM_LINEHAUL for c in route)
+
+        if has_backhaul and not has_linehaul:
+            return False # Backhaul만 남는 경우는 무효
+        return True
         
     def random_removal(self, current_routes , num_to_remove=1):
         all_customers = [
         customer for route in current_routes for customer in route if customer != 0
         ]
-
+        # print(all_customers)
         num_to_remove = min(num_to_remove, len(self.nodes))
         removed_list = random.sample(all_customers, num_to_remove)
         removed_set = set(removed_list)
@@ -113,31 +124,40 @@ class destroy_solution:
         return new_solution, removed_list
     
     def worst_removal(self, current_routes, num_to_remove):
-        """비용(거리)을 가장 많이 차지하는 고객을 찾아 제거합니다."""
+        """ [수정된 버전] 제약 조건을 고려하여 안전하게 고객을 제거합니다. """
         costs = []
-        for route in current_routes:
-            for i in range(1, len(route) - 1):
-                prev_node = route[i-1]
-                customer_node = route[i]
-                next_node = route[i+1]
-                
-                cost_saving = (self.Cost_matrix[prev_node][customer_node] +
-                               self.Cost_matrix[customer_node][next_node] -
-                               self.Cost_matrix[prev_node][next_node])
-                
-                costs.append((cost_saving, customer_node))
+        # route_idx와 customer_idx를 함께 저장하여 나중에 고객을 식별
+        customer_locations = []
+        for r_idx, route in enumerate(current_routes):
+            for c_idx in range(1, len(route) - 1):
+                customer_locations.append((r_idx, c_idx))
 
-        # 비용이 큰 순서대로 정렬
+        for r_idx, c_idx in customer_locations:
+            route = current_routes[r_idx]
+            prev_node = route[c_idx - 1]
+            customer_node = route[c_idx]
+            next_node = route[c_idx + 1]
+            
+            cost_saving = (self.Cost_matrix[prev_node][customer_node] +
+                           self.Cost_matrix[customer_node][next_node] -
+                           self.Cost_matrix[prev_node][next_node])
+            
+            # [핵심] 이 고객을 제거했을 때 남는 경로가 유효한지 확인
+            temp_route = route[:c_idx] + route[c_idx+1:]
+            if not self._is_route_valid_after_removal(temp_route):
+                # 경로가 무효해진다면, 이 제거는 절대로 선택되지 않도록 페널티 부여
+                cost_saving = -float('inf')
+            
+            costs.append((cost_saving, customer_node))
+
         costs.sort(key=lambda x: x[0], reverse=True)
         
-        # 제거할 고객 목록 선택
         removed_list = [customer for cost, customer in costs[:num_to_remove]]
         removed_set = set(removed_list)
         
-        # 고객 제거 후 새 경로 생성
         new_solution = [[c for c in r if c not in removed_set] for r in current_routes]
         return new_solution, removed_list
-
+    
     def route_removal(self, current_routes, num_to_remove = 1):
 
         # 1. 고객이 한 명이라도 있는, 즉 비어있지 않은 경로의 인덱스를 찾습니다.
@@ -228,7 +248,11 @@ class repair_solution:
             
             # 옵션 A: 기존 경로에 삽입
             for i, route in enumerate(repaired_solution):
-                for j in range(1, len(route)):
+                last_linehaul_pos = 0
+                for idx, node in enumerate(route):
+                    if 0 < node <= self.NUM_LINEHAUL:
+                        last_linehaul_pos = idx
+                for j in range(1, last_linehaul_pos + 2):
                     potential_route = route[:j] + [customer] + route[j:]
                     if not self.is_route_valid(potential_route):
                         continue
@@ -260,14 +284,19 @@ class repair_solution:
                             break
                 else:
                     repaired_solution[best_insertion['route_idx']].insert(best_insertion['pos'], customer)
-    
+            else:
+                return new_solution, False
 
         # --- 2. Backhaul 고객 삽입 ---
         for customer in back_nodes:
             best_insertion = {'cost_increase': float('inf'), 'route_idx': -1, 'pos': -1}
             
             for i, route in enumerate(repaired_solution):
-                for j in range(1, len(route)):
+                last_linehaul_pos = 0
+                for idx, node in enumerate(route):
+                    if 0 < node <= self.NUM_LINEHAUL:
+                        last_linehaul_pos = idx
+                for j in range(last_linehaul_pos + 1, len(route)):
                     potential_route = route[:j] + [customer] + route[j:]
                     if not self.is_route_valid(potential_route):
                         continue
@@ -282,14 +311,15 @@ class repair_solution:
             # Backhaul은 새 경로를 만들지 않으므로, 유효한 자리가 있을 때만 삽입
             if best_insertion['route_idx'] != -1:
                 repaired_solution[best_insertion['route_idx']].insert(best_insertion['pos'], customer)
-
+            else:
+                return new_solution, False
         # print(sum(1 for route in repaired_solution for customer in route if customer != 0))        
-        return repaired_solution
+        return repaired_solution, True
     
     def regret_insertion(self, new_solution, removed_list):
         repaired_solution = [route[:] for route in new_solution]
         customers_to_insert = list(removed_list)
-        customers_to_insert = sorted(customers_to_insert)
+        # customers_to_insert = sorted(customers_to_insert)
         while customers_to_insert:
             regret_values = []
 
@@ -319,7 +349,9 @@ class repair_solution:
                         insert_costs.append({'cost': new_route_cost, 'route_idx': -1, 'is_new': True})
 
                 # 2. 후회 값 계산
-                if not insert_costs: continue
+                if not insert_costs:
+                    return new_solution, False
+                
                 insert_costs.sort(key=lambda x: x['cost'])
                 
                 best_info = insert_costs[0]
@@ -327,7 +359,8 @@ class repair_solution:
                 regret_values.append({'regret': regret, 'customer': customer, 'info': best_info})
 
             # 3. 후회 값이 가장 큰 고객을 찾아 삽입
-            if not regret_values: break
+            # if not regret_values: 
+            #     return new_solution, False
             regret_values.sort(key=lambda x: x['regret'], reverse=True)
             
             customer_to_insert_info = regret_values[0]
@@ -345,7 +378,7 @@ class repair_solution:
             
             customers_to_insert.remove(cust_id)
         # print(sum(1 for route in repaired_solution for customer in route if customer != 0))
-        return repaired_solution
+        return repaired_solution, True
                 
     def random_insertion(self, new_solution, removed_list):
         # print(f"removed_list: {removed_list}")
@@ -384,9 +417,72 @@ class repair_solution:
                             repaired_solution[i] = [0, customer, 0]
                 else:
                     repaired_solution[chosen_option['route_idx']].insert(chosen_option['pos'], customer)
+            else :
+                return new_solution, False
             # print(f"삽입 후 경로: {repaired_solution}")
             # print(f"삽입 후 경로 길이: {sum(1 for route in repaired_solution for customer in route if customer != 0)}")
    
         # print(sum(1 for route in repaired_solution for customer in route if customer != 0))
-        return repaired_solution
-    
+        return repaired_solution, True
+
+
+
+    def or_opt(self, route, chain_size=3):
+        """
+        하나의 경로에 대해 Or-opt 최적화를 수행합니다.
+        연속된 고객 체인(chain)을 다른 위치로 이동시킵니다.
+        """
+        if len(route) <= 4:
+            return route
+
+        best_route = route
+        improved = True
+        while improved:
+            improved = False
+            # 어떤 고객 체인을 옮길 것인가? (i부터 chain_size만큼)
+            for i in range(1, len(best_route) - chain_size):
+                # 어느 위치로 옮길 것인가? (j 위치의 바로 앞으로)
+                for j in range(1, len(best_route) - 1):
+                    # 자기 자신 주변으로 옮기는 것은 의미가 없으므로 제외
+                    if i <= j < i + chain_size:
+                        continue
+
+                    # 1. 현재 경로에서 체인을 잠시 빼냅니다.
+                    chain = best_route[i : i + chain_size]
+                    temp_route = best_route[:i] + best_route[i + chain_size:]
+                    
+                    # 2. 새로운 위치에 체인을 삽입하여 후보 경로를 만듭니다.
+                    # j의 위치가 체인이 빠지면서 바뀌었을 수 있으므로 조정이 필요할 수 있으나,
+                    # 여기서는 간단하게 구현합니다.
+                    # j가 i보다 뒤에 있었다면, 인덱스를 chain_size만큼 빼줘야 합니다.
+                    insert_pos = j
+                    if j > i:
+                        insert_pos -= chain_size
+                        
+                    new_route = temp_route[:insert_pos] + chain + temp_route[insert_pos:]
+
+                    # 3. 비용과 제약을 검사합니다.
+                    # (간단하게 하기 위해 is_valid_order만 검사, 비용 계산은 전체 경로로 대체)
+                    is_backhaul_started = False
+                    is_valid_order = True
+                    for customer_id in new_route:
+                        if customer_id == 0: continue
+                        is_linehaul = (customer_id <= self.NUM_LINEHAUL)
+                        if not is_linehaul: is_backhaul_started = True
+                        if is_linehaul and is_backhaul_started:
+                            is_valid_order = False
+                            break
+                    
+                    if is_valid_order:
+                        # 기존 비용과 새 비용을 비교
+                        # (정확하려면 엣지 변화만 계산해야 하지만, 전체 계산으로도 동작 확인 가능)
+                        old_cost = calculate_total_cost([best_route], self.Cost_matrix)
+                        new_cost = calculate_total_cost([new_route], self.Cost_matrix)
+
+                        if new_cost < old_cost:
+                            best_route = new_route
+                            improved = True
+                    
+                    if improved: break
+                if improved: break
+        return best_route

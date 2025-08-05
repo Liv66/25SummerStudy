@@ -1,8 +1,9 @@
 import random
 import math
 from Ock_heuristic import destroy_solution, repair_solution # heuristic.py 파일에서 클래스 가져오기
-from Ock_heuristic import calculate_total_cost # heuristic.py 파일에서 함수 가져오기
+from Ock_heuristic import * # heuristic.py 파일에서 함수 가져오기
 import sys
+import time
 
 class ALNS:
     def __init__(self, initial_solution, nodes, destroyer, repairer, Cost_matrix , **params):
@@ -10,6 +11,8 @@ class ALNS:
         self.nodes = nodes
         self.params = params
         self.Cost_matrix = Cost_matrix
+
+        self.repairer = repairer
         # 해 정보
         self.current_solution = initial_solution
         self.best_solution = initial_solution
@@ -58,21 +61,37 @@ class ALNS:
 
     def run(self, iterations, temperature, cooling_rate, max_no_improvement=500):
         # print(f"ALNS 시작. 초기 비용: {self.best_cost:.2f}")
+        start_time = time.time()
         no_improve = 0
         fail_repair = 0
         for i in range(iterations):
+            iter = i
+            if time.time() - start_time > 57:
+                print("\n--- ALNS 종료 ---")
+                print(f"총 실행수 {iter}")
+                print(f"총 실패 횟수 {fail_repair}, 총 실패 비율 {fail_repair / iter * 100:.2f}%")
+                return self.best_solution, self.best_cost
+            
             # 1. 파괴 및 재구성 휴리스틱 선택
             destroy_idx, destroy_method = self.select_heuristic(self.destroy_methods, self.destroy_weights)
             repair_idx, repair_method = self.select_heuristic(self.repair_methods, self.repair_weights)
             
             # 2. 새로운 해 생성
             # num_to_remove 등 파라미터는 필요에 따라 조절 가능
-            num_to_remove = random.randint(1, len(self.nodes)/10) 
+            if no_improve >= max_no_improvement:
+                num_node = len(self.nodes)
+                num_to_remove = random.randint(num_node//4, num_node//3)
+                no_improve = no_improve*0.8
+            else:
+                num_to_remove = random.randint(1, len(self.nodes)//10) 
+
             partial_solution, removed = destroy_method(self.current_solution, num_to_remove=num_to_remove) 
-            new_solution = repair_method(partial_solution, removed)
+            new_solution, success = repair_method(partial_solution, removed)
+            # print(sum(1 for route in new_solution for customer in route if customer != 0), success)
             # print('경로 포함된 노드 수',sum(1 for route in new_solution for customer in route if customer != 0))
             # print('실제 노드 수', len(self.nodes) - 1)  
-            if sum(1 for route in new_solution for customer in route if customer != 0) != len(self.nodes) - 1:
+
+            if not success or sum(1 for route in new_solution for customer in route if customer != 0) != len(self.nodes) - 1:
                 fail_repair += 1
                 # print(f"사용한 repareer: {repair_method.__name__}")
                 # print(f"사용한 destroyer: {destroy_method.__name__}")
@@ -80,7 +99,6 @@ class ALNS:
                 # print("removed",removed)
                 # print("new",new_solution)
                 continue
-
             new_cost = calculate_total_cost(new_solution, self.Cost_matrix)
 
             # 3. 해 채택 결정 (Simulated Annealing 방식)
@@ -118,9 +136,10 @@ class ALNS:
                 no_improve += 1 # 개선되지 않으면 카운터 증가
 
             # 카운터가 지정된 한계를 넘으면 루프 중단
-            if no_improve >= max_no_improvement:
-                print(f"\nIteration {i+1}: {max_no_improvement}번 반복 동안 해가 개선되지 않아 조기 종료합니다.")
-                break
+            # if no_improve >= max_no_improvement:
+            #     print(f"\nIteration {i+1}: {max_no_improvement}번 반복 동안 해가 개선되지 않아 조기 종료합니다.")
+            #     iter = i
+            #     break
 
             # 5. 가중치 업데이트 (매 100번 반복마다)
             if (i + 1) % 100 == 0:
@@ -129,7 +148,17 @@ class ALNS:
 
             # 6. 온도 감소
             temperature *= cooling_rate
-            
+        
+        # print(f"\n--- ALNS 탐색 종료. 최종 해에 대해 2-opt 최적화를 시작합니다... ---")
+        # two_opt_solution = []
+        # for r in self.best_solution:
+        #     optimized_route = self.repairer.or_opt(route = r, chain_size = 3)
+        #     two_opt_solution.append(optimized_route)
+        #     print("동작함!")
+        # new_solution = two_opt_solution
+        # best_cost = calculate_total_cost(new_solution, self.Cost_matrix)
+        # print("2opt 개선 정도", best_cost/self.best_cost)
         print("\n--- ALNS 종료 ---")
-        print(f"총 실패 횟수 {fail_repair}, 총 실패 비율 {fail_repair / iterations * 100:.2f}%")
+        print(f"총 실패 횟수 {fail_repair}, 총 실패 비율 {fail_repair / iter * 100:.2f}%")
+        # return new_solution, best_cost
         return self.best_solution, self.best_cost
