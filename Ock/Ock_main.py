@@ -46,7 +46,7 @@ if __name__ == "__main__":
     # JSON 파일에서 문제 정보 로드
     prob_list = ['problem_20_0.7.json', 'problem_30_0.7.json', 'problem_100_0.7.json']
     for i in prob_list:
-        problem_info = ic.load_from_json(rf"C:\Users\옥중석\Desktop\25SummerStudy\instances\{i}")
+        problem_info = ic.load_from_json(rf"instances\{i}")
         
         # Ock_main 함수 실행
         sol, cost, epalsed_time, nodes = Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, stop_no_improvement=2000)
