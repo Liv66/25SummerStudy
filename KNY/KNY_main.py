@@ -21,7 +21,7 @@ from typing import List
 from util import get_distance, plot_vrpb, check_feasible
 from KNY_alns import alns_vrpb
 
-random.seed(42)
+#random.seed(42)
 
 # ─────────────────────────────────────────────────────────────
 # 0) 공용 도우미 함수 / 클래스
@@ -200,7 +200,7 @@ def improved_initial_solution(
             used_deliv.add(o_node)
 
         # pickup 삽입
-        avail_pick_cap = cur_load
+        avail_pick_cap = capa #cur_load
         cand = []
         last_deliv = cur_route[-1] if len(cur_route) > 2 else cur_route[-2]
         for p_node, p_dem in pickup_items:
@@ -548,9 +548,9 @@ def run_kjh_problem(problem_path: Path):
               f"(utilisation {utilisation:5.1%})")  # ★
     # 기존 수동 매핑 코드를 다음으로 교체
     plot_problem_info = prepare_plot_data(coords, node_types, problem_info)
-    plot_vrpb(plot_problem_info, best_routes, f"VRPB obj: {best_cost:.1f}")
+    plot_vrpb(plot_problem_info, best_routes, f"VRPB obj: {best_cost:.0f}")
 
 
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parents[1]
-    run_kjh_problem(ROOT / "instances" / "problem_50_0.5.json")
+    run_kjh_problem(ROOT / "instances" / "problem_150_0.85.json")
