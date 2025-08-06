@@ -50,31 +50,31 @@ class ACO_VRPB:
         """
         K-vehicle 제약을 지키는 삽입 휴리스틱 기반 경로 생성
         """
-        # 1. 초기화: K개의 차량 상태와 방문할 고객 목록 준비
+        # 1. 초기화: K개의 차량, 노드, 용량
         clusters = [[] for _ in range(K)]
         linehaul_loads = [0] * K
         backhaul_loads = [0] * K
         last_nodes = [0] * K  # 각 차량의 마지막 위치, 초기값은 Depot(0)
 
         unvisited_customers = all_linehaul + all_backhaul
-        random.shuffle(unvisited_customers) # 개미마다 다른 해를 찾기 위해 순서를 섞음
+        random.shuffle(unvisited_customers)
 
-        # 2. 모든 고객을 K대의 차량 중 가장 비용이 적은 곳에 삽입
+        # 2. 비용이 적은 곳으로 고객 배치 - greedy하게
         for customer in unvisited_customers:
             best_vehicle_idx = -1
             min_insertion_cost = float('inf')
             is_linehaul = demand[customer] > 0
 
             for i in range(K):
-                # 용량 제약 조건 확인
+                # 용량 제약 조건
                 if is_linehaul:
                     if linehaul_loads[i] + demand[customer] > capacityLimit:
-                        continue # 용량 초과
-                else: # 반송
+                        continue
+                else:
                     if backhaul_loads[i] + abs(demand[customer]) > capacityLimit:
-                        continue # 용량 초과
+                        continue
                 
-                # 삽입 비용 계산 (현재 차량의 마지막 노드에서 이 고객까지의 거리)
+                # 비용 계산 (마지막 노드에서 이 고객까지의 거리)
                 cost = edges.get((min(last_nodes[i], customer), max(last_nodes[i], customer)), float('inf'))
 
                 if cost < min_insertion_cost:
@@ -90,10 +90,9 @@ class ACO_VRPB:
                 else:
                     backhaul_loads[best_vehicle_idx] += abs(demand[customer])
             else:
-                # 모든 차량이 이 고객을 받을 수 없는 경우 (용량 등), 이 개미는 실패
                 return []
 
-        # 3. K개의 그룹(클러스터)이 완성됨. 이제 각 그룹 내에서 경로 순서 결정
+        # 3. 순서 결정 (ACO)
         solution = []
         for k in range(K):
             cluster_nodes = clusters[k]
@@ -107,7 +106,7 @@ class ACO_VRPB:
             
             # 각 파트 내에서 경로 생성 (ACO 확률 기반)
             path = []
-            current_node = 0 # Depot에서 시작
+            current_node = 0
             while linehaul_part:
                 probabilities = self._calculate_probabilities(current_node, linehaul_part, feromones, edges)
                 next_node = numpy.random.choice(linehaul_part, p=probabilities)
@@ -172,52 +171,154 @@ class ACO_VRPB:
         return bestSolution, feromones
 
     def solve(self, K, capa, nodes_coord, demands):
-            """
-            [1. 클러스터링 -> 2. ACO 경로탐색 -> 3. 2-opt 후처리] 하이브리드 전략
-            """
-            # --- 데이터 준비 ---
-            linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, nodes_coord, demands)
-            dist_matrix = get_distance(nodes_coord)
-            bestSolution = None
+        linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, nodes_coord, demands)
+        bestSolution = None
+        dist_matrix = get_distance(nodes_coord)
 
-            # --- 메인 루프 ---
-            for i in range(self.iterations):
-                solutions = []
-                for _ in range(self.ants):
+        # 메인 루프
+        for i in range(self.iterations):
+            solutions = []
+            for _ in range(self.ants):
+                ant_solution = self.solution_one_ant_VRPB(K, linehaul, backhaul, edges, capacity, demand_dict, feromones, nodes_coord)
+                ant_distance = self.rate_solution(ant_solution, K, edges, demand_dict)
+                solutions.append((ant_solution, ant_distance))
 
-                    # --- 1단계 & 2단계: 선 클러스터링(CP-SAT) + 경로 순서 탐색(ACO) ---
-                    # solution_one_ant_VRPB가 클러스터링 후 ACO로 경로 순서를 찾아옴
-                    ant_solution = self.solution_one_ant_VRPB(K, linehaul, backhaul, edges, capacity, demand_dict, feromones, nodes_coord)
+            bestSolution, feromones = self.update_feromone(feromones, solutions, bestSolution)
 
-                    # --- 3단계: 경로 후처리 (2-opt) ---
-                    optimized_paths = []
-                    if ant_solution:
-                        for path in ant_solution:
-                            if len(path) > 1: # 노드가 2개 이상인 경로만 2-opt 수행
-                                # VRPB 규칙을 아는 2-opt 함수로 경로 다듬기
-                                _, optimized_path = two_opt([0] + path, dist_matrix, demand_dict)
-                                optimized_paths.append(optimized_path[1:]) # depot 제외하고 저장
-                            else:
-                                optimized_paths.append(path)
-
-                    # '개선된 해답'으로 거리 평가
-                    ant_distance = self.rate_solution(optimized_paths, K, edges, demand_dict)
-                    solutions.append((optimized_paths, ant_distance))
-
-                # --- 학습 단계 ---
-                bestSolution, feromones = self.update_feromone(feromones, solutions, bestSolution)
-
-                if bestSolution and bestSolution[1] != float('inf'):
-                    print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}, Vehicles = {len(bestSolution[0])}")
-                else:
-                    print(f"Iteration {i+1}: Finding valid solution...")
-
-            # --- 최종 결과 출력 ---
-            print("\n--- Final Solution ---")
             if bestSolution and bestSolution[1] != float('inf'):
-                print(f"Path: {bestSolution[0]}")
-                print(f"Total Distance: {bestSolution[1]:.2f}")
+                print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}, Vehicles = {len(bestSolution[0])}")
             else:
-                print("Failed to find a valid solution with the given constraints.")
+                print(f"Iteration {i+1}: Finding valid solution...")
 
+        # 배송/반봉 분할해서 2-opt 적용
+        if bestSolution and bestSolution[1] != float('inf'):
+            print("\n--- Applying split 2-opt to the final solution... ---")
+
+            aco_routes = bestSolution[0]
+
+            optimized_routes = []
+            for path in aco_routes:
+                if not path:
+                    optimized_routes.append([])
+                    continue
+
+                # 1. 배송 / 반송 분리
+                linehaul_part = [node for node in path if demand_dict.get(node, 0) > 0]
+                backhaul_part = [node for node in path if demand_dict.get(node, 0) < 0]
+
+                # 2. 배송 / 반송 나누어서 2-opt 실행
+                if len(linehaul_part) > 1:
+                    _, opt_lh_route = two_opt([0] + linehaul_part, dist_matrix)
+                    linehaul_part = opt_lh_route[1:] 
+
+                if len(backhaul_part) > 1:
+                    start_node = linehaul_part[-1] if linehaul_part else 0
+                    _, opt_bh_route = two_opt([start_node] + backhaul_part, dist_matrix)
+                    backhaul_part = opt_bh_route[1:] 
+
+                # 3. 배송 / 반송 나누었던 거 다시 결합
+                optimized_routes.append(linehaul_part + backhaul_part)
+
+            # 개선된 경로로 최종 거리 재계산
+            final_distance = self.rate_solution(optimized_routes, K, edges, demand_dict)
+            final_solution = (optimized_routes, final_distance)
+
+            return final_solution
+        else:
             return bestSolution
+
+
+#    def solve(self, K, capa, nodes_coord, demands):
+#            """
+#            [1. 클러스터링 -> 2. ACO 경로탐색 -> 3. 2-opt 후처리] 하이브리드 전략
+#            """
+#            # --- 데이터 준비 ---
+#            linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, nodes_coord, demands)
+#            dist_matrix = get_distance(nodes_coord)
+#            bestSolution = None
+#
+#            # --- 메인 루프 ---
+#            for i in range(self.iterations):
+#                solutions = []
+#                for _ in range(self.ants):
+#
+#                    # --- 1단계 & 2단계: 선 클러스터링(CP-SAT) + 경로 순서 탐색(ACO) ---
+#                    # solution_one_ant_VRPB가 클러스터링 후 ACO로 경로 순서를 찾아옴
+#                    ant_solution = self.solution_one_ant_VRPB(K, linehaul, backhaul, edges, capacity, demand_dict, feromones, nodes_coord)
+#
+#                    # --- 3단계: 경로 후처리 (2-opt) ---
+#                    optimized_paths = []
+#                    if ant_solution:
+#                        for path in ant_solution:
+#                            if len(path) > 1: # 노드가 2개 이상인 경로만 2-opt 수행
+#                                # VRPB 규칙을 아는 2-opt 함수로 경로 다듬기
+#                                _, optimized_path = two_opt([0] + path, dist_matrix, demand_dict)
+#                                optimized_paths.append(optimized_path[1:]) # depot 제외하고 저장
+#                            else:
+#                                optimized_paths.append(path)
+#
+#                    # '개선된 해답'으로 거리 평가
+#                    ant_distance = self.rate_solution(optimized_paths, K, edges, demand_dict)
+#                    solutions.append((optimized_paths, ant_distance))
+#
+#                # --- 학습 단계 ---
+#                bestSolution, feromones = self.update_feromone(feromones, solutions, bestSolution)
+#
+#                if bestSolution and bestSolution[1] != float('inf'):
+#                    print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}, Vehicles = {len(bestSolution[0])}")
+#                else:
+#                    print(f"Iteration {i+1}: Finding valid solution...")
+#
+#            # --- 최종 결과 출력 ---
+#            print("\n--- Final Solution ---")
+#            if bestSolution and bestSolution[1] != float('inf'):
+#                print(f"Path: {bestSolution[0]}")
+#                print(f"Total Distance: {bestSolution[1]:.2f}")
+#            else:
+#                print("Failed to find a valid solution with the given constraints.")
+#
+#            return bestSolution
+
+
+#    def solve(self, K, capa, nodes_coord, demands):
+#        linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, nodes_coord, demands)
+#        bestSolution = None
+#        dist_matrix = get_distance(nodes_coord)
+#
+#        # ACO 메인 루프
+#        for i in range(self.iterations):
+#            solutions = []
+#            for _ in range(self.ants):
+#                ant_solution = self.solution_one_ant_VRPB(K, linehaul, backhaul, edges, capacity, demand_dict, feromones, nodes_coord)
+#                ant_distance = self.rate_solution(ant_solution, K, edges, demand_dict)
+#                solutions.append((ant_solution, ant_distance))
+#            
+#            bestSolution, feromones = self.update_feromone(feromones, solutions, bestSolution)
+#            
+#            if bestSolution and bestSolution[1] != float('inf'):
+#                print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}, Vehicles = {len(bestSolution[0])}")
+#            else:
+#                print(f"Iteration {i+1}: Finding valid solution...")
+#
+#        # 최종 해답에 2-opt를 5회 반복
+#        if bestSolution and bestSolution[1] != float('inf'):
+#            current_best_routes = bestSolution[0]
+#            for i in range(5): # 5회 반복
+#                optimized_routes = []
+#                for path in current_best_routes:
+#                    if len(path) > 1:
+#                        _, optimized_path = two_opt([0] + path, dist_matrix)
+#                        optimized_routes.append(optimized_path[1:])
+#                    else:
+#                        optimized_routes.append(path)
+#                # 경로 업데이트
+#                current_best_routes = optimized_routes
+#
+#            # 반복 끝나고 최종 거리 재계산
+#            final_distance = self.rate_solution(current_best_routes, K, edges, demand_dict)
+#            final_solution = (current_best_routes, final_distance)
+#            
+#            print(f"Final distance after 5 iterations of 2-opt: {final_distance:.2f}")
+#            return final_solution
+#        else:
+#            return bestSolution

@@ -2,6 +2,63 @@ from math import sqrt
 import matplotlib.pyplot as plt
 from ortools.sat.python import cp_model
 
+def two_opt(nodes, dist_matrix):
+    """
+    주어진 노드 리스트(경로)를 2-opt 알고리즘으로 최적화합니다.
+    (VRPB 규칙은 고려하지 않는 표준 버전)
+    """
+    result_route = nodes[:]
+    improved = True
+    while improved:
+        improved = False
+        for i in range(1, len(result_route) - 2):
+            for j in range(i + 1, len(result_route) - 1):
+                original_dist = dist_matrix[result_route[i-1]][result_route[i]] + dist_matrix[result_route[j]][result_route[j+1]]
+                new_dist = dist_matrix[result_route[i-1]][result_route[j]] + dist_matrix[result_route[i]][result_route[j+1]]
+                if new_dist < original_dist:
+                    result_route = result_route[:i] + result_route[i:j+1][::-1] + result_route[j+1:]
+                    improved = True
+    
+    final_cost = sum(dist_matrix[result_route[i]][result_route[i + 1]] for i in range(len(result_route) - 1))
+    return final_cost, result_route
+
+"""
+def two_opt(nodes, dist_matrix, demand_dict):   # 새로운거
+    def is_valid_vrpb_route(route, demands):
+        in_backhaul_phase = False
+        for node_idx in route:
+            if node_idx == 0: continue
+            if demands.get(node_idx, 0) < 0:
+                in_backhaul_phase = True
+            if demands.get(node_idx, 0) > 0 and in_backhaul_phase:
+                return False # Backhaul 후 Linehaul 방문 시 규칙 위반
+        return True
+
+    result_route = nodes[:]
+    improved = True
+    
+    while improved:
+        improved = False
+        for i in range(1, len(result_route) - 2):
+            for j in range(i + 1, len(result_route) - 1):
+                
+                # 1. 비용(거리) 변화를 먼저 계산
+                original_dist = dist_matrix[result_route[i-1]][result_route[i]] + dist_matrix[result_route[j]][result_route[j+1]]
+                new_dist = dist_matrix[result_route[i-1]][result_route[j]] + dist_matrix[result_route[i]][result_route[j+1]]
+
+                # 2. 거리가 줄어드는 경우에만 경로를 만들고 검증
+                if new_dist < original_dist:
+                    new_route = result_route[:i] + result_route[i:j+1][::-1] + result_route[j+1:]
+                    
+                    # 3. 변경된 경로가 VRPB 규칙을 지키는지 최종 확인
+                    if is_valid_vrpb_route(new_route, demand_dict):
+                        result_route = new_route
+                        improved = True
+                        
+    final_cost = sum(dist_matrix[result_route[i]][result_route[i + 1]] for i in range(len(result_route) - 1))
+    return final_cost, result_route
+"""
+"""
 def two_opt(nodes, dist_matrix, demand_dict):
     
     def is_valid_vrpb_route(route, demands):
@@ -33,7 +90,8 @@ def two_opt(nodes, dist_matrix, demand_dict):
                         
     final_cost = sum(dist_matrix[result_route[i]][result_route[i + 1]] for i in range(len(result_route) - 1))
     return final_cost, result_route
-
+"""
+    
 def get_distance(nodes_coord):
     """노드들의 좌표가 들어오면 거리 행렬(리스트의 리스트)을 반환합니다."""
     N = len(nodes_coord)

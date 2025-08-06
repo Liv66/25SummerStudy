@@ -103,7 +103,7 @@ def OSM_main():
     VRPB 문제를 정의하고, ACO 솔버로 해결한 뒤, 결과를 출력/시각화합니다.
     """
     # --- 1. JSON 파일에서 문제 데이터 읽어오기 ---
-    file_path = 'C:/Users/risklab/Desktop/code/25SummerStudy/instances/problem_20_0.7.json'
+    file_path = 'C:/Users/risklab/Desktop/code/25SummerStudy/instances/problem_150_0.5.json'
     
     with open(file_path, 'r', encoding='utf-8') as f:
         problem_data = json.load(f)
@@ -124,13 +124,13 @@ def OSM_main():
     print(f"문제 파일 로드 완료: {file_path}")
     print("ACO_VRPB 솔버를 시작합니다...")
     
-    aco_solver = ACO_VRPB(iterations=10000, ants=K, q0=0.9, alpha=1, beta=5)
+    aco_solver = ACO_VRPB(iterations=200, ants=K, q0=0.9, alpha=1, beta=5)
     
     start_time = time.time() # This should now be fine
     ACO_solution = aco_solver.solve(K, capa, all_node_coord, demands)
     print(f"ACO_solution 결과: {ACO_solution}")
     end_time = time.time()
-    execution_time = end_time - start_time
+    execution_time = end_time - start_time 
 
     # --- 3. 결과 처리 및 시각화 ---
     if ACO_solution and ACO_solution[1] != float('inf'):
