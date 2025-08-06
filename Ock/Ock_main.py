@@ -10,6 +10,7 @@ import pandas as pd
 import os
 import json
 import pandas as pd
+import glob
 
 def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000):
 
@@ -47,7 +48,11 @@ def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rat
 
 if __name__ == "__main__":
     # JSON 파일에서 문제 정보 로드
-    prob_list = ['problem_20_0.7.json', 'problem_30_0.7.json', 'problem_100_0.7.json']
+
+    search_pattern = os.path.join('instances', '*.json')
+    problem_filepaths = glob.glob(search_pattern)
+
+    # prob_list = ['problem_20_0.7.json', 'problem_30_0.7.json', 'problem_100_0.7.json']
     # prob_list = ['problem_100_0.7.json']
     results_folder = "results"
     if not os.path.exists(results_folder):
@@ -59,31 +64,36 @@ if __name__ == "__main__":
         # 이 with 블록은 파일을 비우는 역할만 합니다.
         pass
 
-    for i in prob_list:
-        print(f"\n--- 문제 '{i}' 처리 중... ---")
-        problem_info = ic.load_from_json(rf"instances\{i}")
-        
-        # Ock_main 함수 실행
-        sol, cost, epalsed_time, nodes = Ock_main(problem_info, iterations=1000000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000)
-        print(f"\n--- {i} 최종 결과 ---")
-        print(f"{i} 총 실행 시간: {epalsed_time:.2f}초")
-        print(f"{i} 최종 비용: {cost:.2f}")
-        print(f"{i} 최적 경로: {sol}")
-        draw_routes(nodes, sol)
+    for i in problem_filepaths:
+        problem_name = os.path.basename(i)
+        for run_number in range(30):
+            print(f"\n--- 문제 '{problem_name}' 처리 중... ---")
+            problem_info = ic.load_from_json(i)
+            
+            # Ock_main 함수 실행
+            sol, cost, epalsed_time, nodes = Ock_main(problem_info, iterations=1000000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000)
+            print(f"\n--- {i} 최종 결과 ---")
+            print(f"{i} 총 실행 시간: {epalsed_time:.2f}초")
+            print(f"{i} 최종 비용: {cost:.2f}")
+            print(f"{i} 최적 경로: {sol}")
+            draw_routes(nodes, sol)
 
-        result_entry = {
-            'problem_name': i,
-            'final_cost': cost,
-            'elapsed_time': epalsed_time,
-            'solution_routes': sol # 경로는 문자열로 변환하여 저장
-        }
+            result_entry = {
+                'problem_name': i,
+                'run_number': run_number + 1, # 실행 횟수 기록
+                'final_cost': cost,
+                'elapsed_time': epalsed_time,
+                'solution_routes': sol # 경로는 문자열로 변환하여 저장
+            }
 
-        with open(summary_filename, 'a') as f:
-            # 딕셔너리를 JSON 문자열로 변환하여 파일에 쓴다
-            f.write(json.dumps(result_entry) + '\n')
+            with open(summary_filename, 'a') as f:
+                # 딕셔너리를 JSON 문자열로 변환하여 파일에 쓴다
+                f.write(json.dumps(result_entry) + '\n')
 
-        output_filename = os.path.join(results_folder, f"solution_{i.replace('.json', '.png')}")
-        draw_routes(nodes, sol, filename=output_filename)
+            base_name = problem_name.replace('.json', '')
+            output_filename = os.path.join(results_folder, f"solution_{base_name}_run{run_number + 1}.png")
+
+            draw_routes(nodes, sol, filename=output_filename)
 
 # 각 node당 30번 반복 실험하려고 만든 코드
 # 실행하고 싶다면 __name__ == "__main__"이 되게
