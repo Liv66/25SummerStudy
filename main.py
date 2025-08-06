@@ -36,11 +36,8 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
 
 def main():
-    # N_list = [50, 70, 100, 130, 150]
-    # line_p_list = [0.5, 0.7, 0.85]
-    N_list = [100, 130, 150]
+    N_list = [50, 70, 100, 130, 150]
     line_p_list = [0.5, 0.7, 0.85]
-
     capa = 3200
 
     for N in N_list:
@@ -62,6 +59,7 @@ def main():
             elapsed = round(time.time() - start, 2)
 
             obj = check_feasible(problem_info, sol, elapsed, time_limit)
+
             print(title, obj, elapsed)
     # plot_vrpb(problem_info, sol, f'obj : {obj} elapsed : {elapsed}')
 

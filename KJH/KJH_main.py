@@ -13,7 +13,7 @@ def KJH_run(problem_info, time_limit=60, log=False):
     node_demand = problem_info['node_demands']
     capa = problem_info['capa']
     dist_mat = problem_info['dist_mat']
-    random_cost = [0] + [random.random() for _ in range(len(node_type) - 1)]
+    random_cost = [0] + [random.random() for _ in range(N - 1)]
     c = Construction(K, node_type, node_demand, capa, dist_mat)
     initial_routes = c.construct()
     spool = SolPool(initial_routes, capa, node_demand, node_type, random_cost)

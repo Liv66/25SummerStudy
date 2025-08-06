@@ -2,18 +2,18 @@ import random
 
 
 class Route:
-    def __init__(self, hist=None, cost=0, line_load=0, back_load=0, line_idx=1):
+    def __init__(self, hist=None, cost=0, line_load=0, back_load=0, back_idx=1):
         if hist is None:
             hist = []
         self.hist = hist
         self.cost = cost
         self.line_load = line_load
         self.back_load = back_load
-        self.line_idx = line_idx  # back이 시작하는 부분
+        self.back_idx = back_idx  # back이 시작하는 부분
         self.use = False
 
     def __repr__(self):
-        return f"route : {self.hist}, cost : {self.cost}, line_idx : {self.line_idx}"
+        return f"route : {self.hist}, cost : {self.cost}, back_idx : {self.back_idx}"
 
 
 class Construction:
@@ -40,7 +40,7 @@ class Construction:
                     load = routes[k].line_load if isLine else routes[k].back_load
                     if load + self.node_demand[i] > self.capa:
                         continue
-                    for j in range(routes[k].line_idx, len(routes[k].hist)):
+                    for j in range(routes[k].back_idx, len(routes[k].hist)):
                         l, r = routes[k].hist[j - 1], routes[k].hist[j]
                         if cheapestInsertion:
                             # 정교한 비용, Cheapest Feasible Insertion Criterion
@@ -88,7 +88,7 @@ class Construction:
             for idx, node in enumerate(cl):
                 if load + self.node_demand[node] > self.capa:
                     continue
-                for pos in range(routes[k].line_idx, len(routes[k].hist)):
+                for pos in range(routes[k].back_idx, len(routes[k].hist)):
                     pre, suc = routes[k].hist[pos - 1], routes[k].hist[pos]
                     if cheapestInsertion:
                         # 정교한 비용, Cheapest Feasible Insertion Criterion
@@ -153,7 +153,7 @@ class Construction:
         for k in range(self.K):
             if routes[k].line_load > 0:
                 routes[k].use = True
-                routes[k].line_idx = len(routes[k].hist) - 1
+                routes[k].back_idx = len(routes[k].hist) - 1
                 used_route.append(routes[k])
 
         back_flag = self.sequential_insertion(used_route, cl_back, False)
@@ -197,7 +197,7 @@ class Construction:
         for k in range(self.K):
             if routes[k].line_load > 0:
                 routes[k].use = True
-                routes[k].line_idx = len(routes[k].hist) - 1
+                routes[k].back_idx = len(routes[k].hist) - 1
                 used_route.append(routes[k])
 
         back_flag = self.parallel_insertion(used_route, cl_back, False)

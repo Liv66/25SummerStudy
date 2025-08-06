@@ -90,8 +90,7 @@ class GRB_solver:
                 new_route_list, new_cost_list = self.optimize_sc(new_route_list, new_cost_list, N, K)
                 iter += 1
 
-        # if log:
-        #     print(f"Optimize iter {iter}, obj : {objVal}, elapsed time {time.time() - start_time:2f}")
+        if log:
+            print(f"Optimize iter {iter}, obj : {objVal}, elapsed time {time.time() - start_time:2f}")
         objVal = sum(new_cost_list)
-        print(f"Optimize iter {iter}, obj : {objVal}, elapsed time {time.time() - start_time:2f}")
         return new_route_list, objVal
