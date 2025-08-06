@@ -36,7 +36,9 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
 
 def main():
-    N_list = [50, 70, 100, 130, 150]
+    # N_list = [50, 70, 100, 130, 150]
+    # line_p_list = [0.5, 0.7, 0.85]
+    N_list = [100, 130, 150]
     line_p_list = [0.5, 0.7, 0.85]
 
     capa = 3200
@@ -56,7 +58,7 @@ def main():
                     problem_info = json.load(f)
             print("------------------------")
             start = time.time()
-            sol = KJH_run(problem_info, time_limit)
+            sol = KJH_run(problem_info, time_limit, False)
             elapsed = round(time.time() - start, 2)
 
             obj = check_feasible(problem_info, sol, elapsed, time_limit)

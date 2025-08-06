@@ -213,9 +213,8 @@ class Construction:
         return True, routes
 
     def construct(self, log=False):
-        initial_sol = []
         while True:
-            constructionType = random.random() < 0.7
+            constructionType = random.random() < 0.5
             if constructionType:
                 if log:
                     print("parallel")
