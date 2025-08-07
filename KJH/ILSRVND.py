@@ -690,7 +690,7 @@ class ILS_RVND:
                     pert_iter = 0
 
             if end_flag:
-                opt_result, obj = grb_solver.solv_SP(spool, N, self.K, tl= time_limit - (time.time() - start), log=log)
+                opt_result, obj = grb_solver.solv_SP(spool, N, self.K, tl=time_limit - (time.time() - start), log=log)
                 if obj < spool.best_cost:
                     spool.best_cost = obj
                     spool.best_sol = [spool.make_sol(route, spool.cost_hash[spool.get_hash(route)]) for route in
