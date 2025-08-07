@@ -11,11 +11,13 @@ import os
 import json
 import pandas as pd
 import glob
+import validation as v
+
 
 def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000):
 
     # 파라미터 설정
-    nodes, NUM_LINEHAUL, NUM_BACKHAUL, NUM_VEHICLES, CAPACITY = ic.convert_data(problem_info)
+    nodes, NUM_LINEHAUL, NUM_BACKHAUL, NUM_VEHICLES, CAPACITY, inverse_id_map = ic.convert_data(problem_info)
 
     # 노드와 비용 행렬 생성
     cost_matrix = ic.calculate_cost(nodes = nodes)
@@ -44,7 +46,7 @@ def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rat
 
     # print(f"개선율: {(initial_cost - best_cost) / initial_cost * 100:.2f}%")
 
-    return best_routes, best_cost, elapsed_time, nodes
+    return best_routes, best_cost, elapsed_time, nodes, inverse_id_map
 
 if __name__ == "__main__":
     # JSON 파일에서 문제 정보 로드
@@ -71,20 +73,26 @@ if __name__ == "__main__":
             problem_info = ic.load_from_json(i)
             
             # Ock_main 함수 실행
-            sol, cost, epalsed_time, nodes = Ock_main(problem_info, iterations=1000000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000)
+            sol, cost, epalsed_time, nodes, inverse_id_map = Ock_main(problem_info, iterations=1000000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000)
             print(f"\n--- {i} 최종 결과 ---")
             print(f"{i} 총 실행 시간: {epalsed_time:.2f}초")
             print(f"{i} 최종 비용: {cost:.2f}")
             print(f"{i} 최적 경로: {sol}")
             draw_routes(nodes, sol)
 
+            convert_solution = ic.convert_solution(sol, inverse_id_map)
             result_entry = {
                 'problem_name': i,
                 'run_number': run_number + 1, # 실행 횟수 기록
                 'final_cost': cost,
                 'elapsed_time': epalsed_time,
-                'solution_routes': sol # 경로는 문자열로 변환하여 저장
+                'solution_routes': convert_solution,  
+                'feasibility_check': True
             }
+
+            if v.check_feasible(problem_info, convert_solution, epalsed_time, 60) == 0:
+                print(f"Validation failed for {problem_name} on run {run_number + 1}")
+                result_entry['feasibility_check'] = False
 
             with open(summary_filename, 'a') as f:
                 # 딕셔너리를 JSON 문자열로 변환하여 파일에 쓴다
@@ -94,6 +102,7 @@ if __name__ == "__main__":
             output_filename = os.path.join(results_folder, f"solution_{base_name}_run{run_number + 1}.png")
 
             draw_routes(nodes, sol, filename=output_filename)
+
 
 # 각 node당 30번 반복 실험하려고 만든 코드
 # 실행하고 싶다면 __name__ == "__main__"이 되게

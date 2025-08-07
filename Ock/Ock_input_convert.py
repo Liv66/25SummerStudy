@@ -21,7 +21,7 @@ def convert_data(problem_info):
             'demands' : demand}
 
     df = pd.DataFrame(nodes)
-    df = df.sort_values(by='types').reset_index(drop=True)  # types에 따라 정렬
+    df = df.sort_values(by='types').reset_index(drop=False)  # types에 따라 정렬
     NUM_LINEHAUL = df[df['types'] == 1].shape[0]
     NUM_BACKHAUL = df[df['types'] == 2].shape[0]
     type_map = {0: 'depot', 1: 'linehaul', 2: 'backhaul'}
@@ -30,10 +30,14 @@ def convert_data(problem_info):
     df['y'] = df['coords'].str[1]
     df['id'] = df.index
     nodes = df[['id', 'type', 'x', 'y', 'demands']].rename(columns={'demands': 'demand'}).to_dict('records')
+    inverse_id_map = df[['index', 'id']]
 
-    return nodes, NUM_LINEHAUL, NUM_BACKHAUL, NUM_VEHICLES, CAPACITY
+    return nodes, NUM_LINEHAUL, NUM_BACKHAUL, NUM_VEHICLES, CAPACITY, inverse_id_map
 
-
+def convert_solution(solution, inverse_id_map):
+    id_to_index_map = pd.Series(inverse_id_map['index'].values, index=inverse_id_map['id']).to_dict()
+    converted_solution = [[id_to_index_map[id_val] for id_val in route] for route in solution]
+    return converted_solution
 
 def calculate_cost(nodes):
     cost_matrix = [[0] * len(nodes) for _ in range(len(nodes))]
@@ -43,3 +47,4 @@ def calculate_cost(nodes):
                 cost_matrix[i][j] = int(round(math.sqrt((nodes[i]['x'] - nodes[j]['x'])**2 + (nodes[i]['y'] - nodes[j]['y'])**2)))
 
     return cost_matrix
+
