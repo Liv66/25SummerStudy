@@ -126,7 +126,7 @@ def plot_cvrp(nodes_coord, best_result_route, title='', demands=None):
     plt.title(title)
     plt.grid(True)
     plt.legend()
-    plt.show()
+    # plt.show()
 
 def multiple_knapsack_vrpb(demands_dict, capa, K, nodes_coord):
     """
