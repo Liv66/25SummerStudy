@@ -2,12 +2,8 @@ import random
 from Route import *
 
 class GreedyConstructionStrategy:
-    """
-    매 단계마다 비용(거리+페널티) 증가가 가장 적은 고객과 위치를
-    탐욕적으로 선택하여 삽입하는, 보다 정교한 초기해 생성 전략.
-    """
+    # 총 비용이 가장 적게 드는 위치로 노드 삽입
     def _get_insertion_cost(self, customer, route, index, problem_info):
-        """특정 위치에 고객을 삽입할 때의 비용 변화량을 계산 (거리+페널티)"""
         dist_mat = problem_info['dist_mat']
         prev_node = route.get(index - 1)
         next_node = route.get(index)

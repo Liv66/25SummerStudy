@@ -10,30 +10,27 @@ class FirstImprovementStrategy:
     # 첫 번째 개선을 찾는 즉시 적용하고 종료
 
     def minimize(self, solution: CVRPBSolution, start_time, time_limit):
-        """
-        단일 개선을 찾아 적용하고 즉시 종료
-        개선이 발견되면 True, 없으면 False를 반환
-        """
+
         # 시간 제한 체크
         if time.time() - start_time >= time_limit:
             return False
-            
-        # 1. Relocate 연산 시도 (가장 빠른 연산부터)
-        if self._try_relocate(solution, start_time, time_limit):
-            return True
-            
-        # 2. Exchange 연산 시도
+
+        # 1. Exchange 연산 시도
         if self._try_exchange(solution, start_time, time_limit):
             return True
-            
-        # 3. 2-opt 연산 시도 (가장 복잡한 연산 마지막에)
+
+        # 3. 2-opt 연산 시도
         if self._try_two_opt(solution, start_time, time_limit):
             return True
-            
+
+        # 2. Relocate 연산 시도
+        if self._try_relocate(solution, start_time, time_limit):
+            return True
+
         return False
     
     def _try_relocate(self, solution: CVRPBSolution, start_time, time_limit):
-        """Relocate 연산을 시도하여 첫 번째 개선을 찾으면 즉시 적용"""
+
         routes = solution.get_routes()
         
         # 각 경로의 각 고객에 대해
@@ -63,7 +60,7 @@ class FirstImprovementStrategy:
         return False
     
     def _try_exchange(self, solution: CVRPBSolution, start_time, time_limit):
-        """Exchange 연산을 시도하여 첫 번째 개선을 찾으면 즉시 적용"""
+
         routes = solution.get_routes()
         
         for r1_idx, route1 in enumerate(routes):
@@ -89,8 +86,8 @@ class FirstImprovementStrategy:
                             return True
         return False
     
-    def _try_two_opt(self, solution: CVRPBSolution, start_time: float, time_limit: float) -> bool:
-        """2-opt 연산을 시도하여 첫 번째 개선을 찾으면 즉시 적용"""
+    def _try_two_opt(self, solution: CVRPBSolution, start_time, time_limit):
+
         routes = solution.get_routes()
         
         for route_idx, route in enumerate(routes):
@@ -109,7 +106,7 @@ class FirstImprovementStrategy:
         return False
     
     def _is_relocate_improving(self, solution, from_route_idx, from_pos, to_route_idx, to_pos) -> bool:
-        """Relocate 개선 판단"""
+
         routes = solution.get_routes()
         from_route = routes[from_route_idx]
         to_route = routes[to_route_idx]
@@ -138,7 +135,7 @@ class FirstImprovementStrategy:
         return penalty_gain > 1e-9 or (abs(penalty_gain) < 1e-9 and distance_gain > 1e-9)
     
     def _is_exchange_improving(self, solution, r1_idx, pos1, r2_idx, pos2):
-        """Exchange 개선 ?>"""
+
         routes = solution.get_routes()
         route1, route2 = routes[r1_idx], routes[r2_idx]
         customer1, customer2 = route1.get(pos1), route2.get(pos2)
@@ -173,7 +170,7 @@ class FirstImprovementStrategy:
         return penalty_gain > 1e-9 or (abs(penalty_gain) < 1e-9 and distance_gain > 1e-9)
     
     def _is_two_opt_improving(self, solution, route_idx, i, j):
-        """2-opt 개선?"""
+
         route = solution.get_routes()[route_idx]
         problem_info = solution.get_problem_info()
         dist = problem_info['dist_mat']
@@ -192,7 +189,7 @@ class FirstImprovementStrategy:
         return distance_gain > 1e-9
     
     def _calculate_relocate_penalty_gain(self, solution, from_route_idx, from_pos, to_route_idx, customer) -> float:
-        """Relocate 연산의 페널티 계산"""
+
         routes = solution.get_routes()
         from_route = routes[from_route_idx]
         to_route = routes[to_route_idx]
@@ -223,7 +220,7 @@ class FirstImprovementStrategy:
         return penalty_before - penalty_after
     
     def _check_relocate_order(self, solution, from_route_idx, from_pos, to_route_idx, to_pos, customer) -> bool:
-        """Relocate 연산의 순서 제약을 체크"""
+
         routes = solution.get_routes()
         from_route = routes[from_route_idx]
         to_route = routes[to_route_idx]
@@ -250,7 +247,7 @@ class FirstImprovementStrategy:
             return to_pos > to_route.get_linehaul_count()
     
     def _apply_relocate(self, solution, from_route_idx, from_pos, to_route_idx, to_pos):
-        """Relocate 연산을 실제로 적용"""
+
         routes = solution.get_routes()
         from_route = routes[from_route_idx]
         to_route = routes[to_route_idx]
@@ -285,7 +282,7 @@ class FirstImprovementStrategy:
         solution.update_cost_with_gain(total_gain)
     
     def _calculate_exchange_penalty_gain(self, solution, r1_idx, pos1, r2_idx, pos2) -> float:
-        """Exchange 연산의 페널티 변화를 계산"""
+
         routes = solution.get_routes()
         route1, route2 = routes[r1_idx], routes[r2_idx]
         
@@ -326,7 +323,7 @@ class FirstImprovementStrategy:
         return penalty_before - penalty_after
     
     def _apply_exchange(self, solution, r1_idx, pos1, r2_idx, pos2):
-        """Exchange 연산을 실제로 적용"""
+
         routes = solution.get_routes()
         route1, route2 = routes[r1_idx], routes[r2_idx]
         
@@ -376,7 +373,7 @@ class FirstImprovementStrategy:
         solution.update_cost_with_gain(total_gain)
     
     def _apply_two_opt(self, solution, route_idx, i, j):
-        """2-opt 연산을 실제로 적용"""
+
         route = solution.get_routes()[route_idx]
         problem_info = solution.get_problem_info()
         

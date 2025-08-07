@@ -6,7 +6,7 @@ import random
 import copy
 
 class IteratedLocalSearchSolver:
-    """ILS 알고리즘을 사용"""
+    """ILS"""
     def __init__(self, construction_strategy: GreedyConstructionStrategy, local_search_strategy: FirstImprovementStrategy):
         self.construction_strategy = construction_strategy
         self.local_search_strategy = local_search_strategy
@@ -34,7 +34,7 @@ class IteratedLocalSearchSolver:
 
         iteration = 0
         iterations_without_improvement = 0
-        max_iters_without_improvement = 20
+        max_iters_without_improvement = 40
 
         # 3. ILS 메인 루프 (ILS Loop)
         while time.time() - start_time < time_limit:
@@ -50,12 +50,12 @@ class IteratedLocalSearchSolver:
             print(f"--- ILS Iteration {iteration}, Best Cost: {best_cost:.2f} (Feasible: {is_best_feasible}), Time: {elapsed_time:.1f}s/{time_limit}s ---")
 
             # 4. 교란 (Perturbation)
-            strength = 0.2 + (iteration * 0.01) if iteration < 20 else 0.4
+            strength = 0.3 + (iteration * 0.01)
             perturbed_solution = self._perturb(best_solution, instance, strength)
 
             # 5. 교란된 해에 대한 Local Search (LS Loop)
             ls_improvements = 0
-            max_ls_improvements = 50  # ILS 내 Local Search 개선 횟수 제한
+            max_ls_improvements = 200  # ILS 내 Local Search 개선 횟수 제한
             while time.time() - start_time < time_limit and ls_improvements < max_ls_improvements:
                 was_improved = self.local_search_strategy.minimize(perturbed_solution, start_time, time_limit)
                 if not was_improved:
@@ -72,11 +72,14 @@ class IteratedLocalSearchSolver:
             is_new_feasible = perturbed_solution.get_penalty_cost(perturbed_solution.penalty_rate) < 1e-9
 
             accepted = False
-            if is_new_feasible and not is_best_feasible: accepted = True
+            if is_new_feasible and not is_best_feasible:
+                accepted = True
             elif is_new_feasible and is_best_feasible:
-                if new_cost < best_cost: accepted = True
+                if new_cost < best_cost:
+                    accepted = True
             elif not is_new_feasible and not is_best_feasible:
-                if new_cost < best_cost: accepted = True
+                if new_cost < best_cost:
+                    accepted = True
 
             if accepted:
                 best_solution = copy.deepcopy(perturbed_solution)
@@ -121,6 +124,7 @@ class IteratedLocalSearchSolver:
 
     def _repair(self, solution: CVRPBSolution, customers_to_add: list, problem_info: dict):
         random.shuffle(customers_to_add)
+        # customer 하나하나 복구
         for customer in customers_to_add:
             min_cost_increase = float('inf')
             best_route = None
@@ -135,7 +139,7 @@ class IteratedLocalSearchSolver:
                     if route.get_linehaul_count() == 0: continue
                     start_idx = route.get_linehaul_count() + 1
                     end_idx = route.size()
-
+                # 비용이 적게 증가하는 위치에 다시 삽입
                 for i in range(start_idx, end_idx + 1):
                     cost_increase = route.get_cost_increase_for_insertion(customer, i, solution.penalty_rate)
                     if cost_increase < min_cost_increase:

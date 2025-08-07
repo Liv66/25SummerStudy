@@ -74,7 +74,7 @@ class Route:
             node = self.backhaul_customers.pop(i - lc - 1)
             self.pickup_load -= self.problem_info['node_demands'][node]
             
-    def remove_customer_by_id(self, customer_id: int):
+    def remove_customer_by_id(self, customer_id):
         """고객 ID를 받아 경로에서 제거합니다."""
         try:
             self.linehaul_customers.remove(customer_id)
@@ -110,7 +110,7 @@ class Route:
 
 
 
-    def get_distance_cost(self) -> float:
+    def get_distance_cost(self):
         dist = self.problem_info['dist_mat']
         cost = 0.0
         prev = 0
@@ -121,8 +121,8 @@ class Route:
         cost += dist[prev][0] # 마지막 고객에서 depot으로 복귀
         return cost
         
-    def get_cost_increase_for_insertion(self, customer: int, index: int, penalty_rate: float) -> float:
-        """고객을 특정 위치에 삽입했을 때의 비용 증가분을 계산합니다."""
+    def get_cost_increase_for_insertion(self, customer, index, penalty_rate):
+
         dist = self.problem_info['dist_mat']
         demands = self.problem_info['node_demands']
         
@@ -179,13 +179,12 @@ class Route:
     def size(self):
         return len(self.linehaul_customers) + len(self.backhaul_customers) + 2
 
-    def __str__(self) -> str:
-        return "0 " + " ".join(str(n) for n in self.linehaul_customers) + " " + " ".join(str(n) for n in self.backhaul_customers) + " 0"
-    def __eq__(self, other) -> bool:
+
+    def __eq__(self, other):
         if not isinstance(other, Route): return False
         return self.linehaul_customers == other.linehaul_customers and self.backhaul_customers == other.backhaul_customers
-    def __hash__(self) -> int: return hash((tuple(self.linehaul_customers), tuple(self.backhaul_customers)))
-    def __iter__(self) -> Iterator[int]:
+
+    def __iter__(self):
         yield 0
         for n in self.linehaul_customers: yield n
         for n in self.backhaul_customers: yield n

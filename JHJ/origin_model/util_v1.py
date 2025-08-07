@@ -1,33 +1,21 @@
 
 def get_routes(solution):
-    """solution이 리스트라면 그대로, CVRPBSolution 객체라면 내부 리스트 추출"""
     try:
         return solution.get_routes()
     except AttributeError:
         return list(solution)
 
 def get_total_cost(solution):
-    """routes 리스트 또는 CVRPBSolution 객체의 총 비용을 계산"""
+
     routes = get_routes(solution)
     return sum(r.get_cost() for r in routes)
 
 def shuffle_routes(solution):
-    """routes 리스트를 제자리에서 섞음"""
+
     import random
     routes = get_routes(solution)
     random.shuffle(routes)
     return routes
-
-def unmark_all_routes(solution):
-    """각 Route 객체의 unmark_all 호출(정의된 경우만)"""
-    for r in get_routes(solution):
-        if hasattr(r, 'unmark_all'):
-            r.unmark_all()
-    return solution
-
-def routes_to_str(solution):
-    """각 Route.__str__() 결과를 줄바꿈으로 연결"""
-    return "\n".join(str(r) for r in get_routes(solution))
 
 from copy import deepcopy
 from math import sqrt
