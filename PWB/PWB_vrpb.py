@@ -65,7 +65,6 @@ def two_opt_wb(depot, nodes, dist_matrix, nodes_coord=None, show=False):
 
     return result_cost, result_route
 
-
 def kde_out(n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix):
     capacities = [vehicle_capacity] * m
     depot_idx = 0
@@ -84,68 +83,104 @@ def kde_out(n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matri
     maxs_backhaul = np.max(backhaul_coord, axis=0)
     return capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul, mins_backhaul, maxs_backhaul
 
+def weighted_kde_out(n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix):
+    capacities = [vehicle_capacity] * m
+    depot_idx = 0
+    depot_coord = coords_dict[0]
+    linehaul_ids = [i for i, t in enumerate(node_types) if t == 1]
+    linehaul_coord = [coords_dict[i] for i in linehaul_ids]
+    backhaul_ids = [i for i, t in enumerate(node_types) if t == 2]
+    backhaul_coord = [coords_dict[i] for i in backhaul_ids]
+    # ---- Customer 분포 주청 ----
+    kde_linehaul = gaussian_kde(np.array(linehaul_coord).T, weights = demands[linehaul_ids])
+    mins_linehaul = np.min(linehaul_coord, axis=0)
+    maxs_linehaul = np.max(linehaul_coord, axis=0)
+    kde_backhaul = gaussian_kde(np.array(backhaul_coord).T, weights = demands[backhaul_ids])
+    mins_backhaul = np.min(backhaul_coord, axis=0)
+    maxs_backhaul = np.max(backhaul_coord, axis=0)
+    return capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul, mins_backhaul, maxs_backhaul
+
+def core_out(n, m, vehicle_capacity, demands, node_types, coords_dict, dist_matrix):
+    capacities = [vehicle_capacity] * m
+    depot_idx = 0
+    depot_coord = coords_dict[0]
+    linehaul_ids = [i for i, t in enumerate(node_types) if t == 1]
+    linehaul_coord = [coords_dict[i] for i in linehaul_ids]
+    backhaul_ids = [i for i, t in enumerate(node_types) if t == 2]
+    backhaul_coord = [coords_dict[i] for i in backhaul_ids]
+    # ---- Customer 중 m개 선택 ----
+    kde_linehaul = np.array(linehaul_coord) #support
+    mins_linehaul = np.log1p(demands[linehaul_ids]) / np.sum(np.log1p(demands[linehaul_ids])) #prob
+    maxs_linehaul = np.max(linehaul_coord, axis=0)
+    kde_backhaul = np.array(backhaul_coord) #support
+    mins_backhaul = np.log1p(demands[backhaul_ids]) / np.sum(np.log1p(demands[backhaul_ids])) #prob
+    maxs_backhaul = np.max(backhaul_coord, axis=0)
+    return capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord, kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul, mins_backhaul, maxs_backhaul
+
+def euclidean(p1, p2):
+    return np.linalg.norm(np.array(p1) - np.array(p2))
+
+def SSCFLP(time_left, customer_coords, customer_idx, kde, mins, maxs, m, demands, capacities):
+    nn = len(customer_coords)
+    raw_samples = kde.resample(m).T
+    clipped_samples = np.clip(raw_samples, mins, maxs)
+    facility_coords = [tuple(coord) for coord in clipped_samples]
+    #facility_coords = np.random.choice(nn, size=m, p=mins)
+
+    transport_cost = [[euclidean(customer_coords[i], facility_coords[j]) for j in range(m)] for i in range(nn)]
+    if nn > 200:
+        time_limit = max(0.1, time_left)
+    else:
+        time_limit = nn*0.02
+
+    model = gp.Model("SSCFLP")
+    model.setParam("OutputFlag", 0)
+    model.setParam("TimeLimit", time_limit)
+
+    x = model.addVars(nn, m, vtype=GRB.BINARY)
+    y = model.addVars(m, vtype=GRB.BINARY)
+
+    model.setObjective(
+        gp.quicksum(transport_cost[i][j] * x[i, j] for i in range(nn) for j in range(m)), GRB.MINIMIZE
+    )
+
+    for i in range(nn):
+        model.addConstr(gp.quicksum(x[i, j] for j in range(m)) == 1)
+    for j in range(m):
+        model.addConstr(
+            gp.quicksum(demands[customer_idx[i]] * x[i, j] for i in range(nn)) <= capacities[j] * y[j])
+    for i in range(nn):
+        for j in range(m):
+            model.addConstr(x[i, j] <= y[j])
+
+    model.optimize()
+
+    if model.SolCount == 0:
+        print("❌ No solution found for SSCFLP.")
+        return [], [[] for _ in range(m)]
+
+    assigned_customers = [[] for _ in range(m)]
+    for i in range(nn):
+        for j in range(m):
+            if x[i, j].X > 0.6:
+                assigned_customers[j].append(customer_idx[i])
+
+    return facility_coords, assigned_customers
+
 
 def run_sscflp_vrpb(time_left, capacities, depot_idx, depot_coord, linehaul_ids, linehaul_coord, backhaul_ids, backhaul_coord,
                     kde_linehaul, mins_linehaul, maxs_linehaul, kde_backhaul, mins_backhaul, maxs_backhaul, n, m,
                     vehicle_capacity, demands, node_types, coords_dict, dist_matrix):
-    def euclidean(p1, p2):
-        return np.linalg.norm(np.array(p1) - np.array(p2))
-
-    def SSCFLP(time_left, customer_coords, customer_idx, kde, mins, maxs):
-        nn = len(customer_coords)
-        raw_samples = kde.resample(m).T
-        clipped_samples = np.clip(raw_samples, mins, maxs)
-        facility_coords = [tuple(coord) for coord in clipped_samples]
-
-        transport_cost = [[euclidean(customer_coords[i], facility_coords[j]) for j in range(m)] for i in range(nn)]
-        if nn > 200:
-            time_limit = max(0.1, time_left)
-        else:
-            time_limit = nn*0.02
-
-        model = gp.Model("SSCFLP")
-        model.setParam("OutputFlag", 0)
-        model.setParam("TimeLimit", time_limit)
-
-        x = model.addVars(nn, m, vtype=GRB.BINARY)
-        y = model.addVars(m, vtype=GRB.BINARY)
-
-        model.setObjective(
-            gp.quicksum(transport_cost[i][j] * x[i, j] for i in range(nn) for j in range(m)), GRB.MINIMIZE
-        )
-
-        for i in range(nn):
-            model.addConstr(gp.quicksum(x[i, j] for j in range(m)) == 1)
-        for j in range(m):
-            model.addConstr(
-                gp.quicksum(demands[customer_idx[i]] * x[i, j] for i in range(nn)) <= capacities[j] * y[j])
-        for i in range(nn):
-            for j in range(m):
-                model.addConstr(x[i, j] <= y[j])
-
-        model.optimize()
-
-        if model.SolCount == 0:
-            print("❌ No solution found for SSCFLP.")
-            return [], [[] for _ in range(m)]
-
-        assigned_customers = [[] for _ in range(m)]
-        for i in range(nn):
-            for j in range(m):
-                if x[i, j].X > 0.6:
-                    assigned_customers[j].append(customer_idx[i])
-
-        return facility_coords, assigned_customers
 
     time_left2 = time_left
     while True:
         start = time.time()
         facility_linehaul, assigned_linehaul = SSCFLP(time_left/2, linehaul_coord, linehaul_ids, kde_linehaul, mins_linehaul,
-                                                  maxs_linehaul)
+                                                  maxs_linehaul, m, demands, capacities)
         elapsed = time.time() - start
         time_left2 = time_left2 - elapsed  # ✅ 수정: 실제 남은 시간
         facility_backhaul, assigned_backhaul = SSCFLP(time_left2, backhaul_coord, backhaul_ids, kde_backhaul, mins_backhaul,
-                                                  maxs_backhaul)
+                                                  maxs_backhaul, m, demands, capacities)
 
         nonempty_linehaul_idx = [i for i, group in enumerate(assigned_linehaul) if group]
         if len(nonempty_linehaul_idx) == 0:

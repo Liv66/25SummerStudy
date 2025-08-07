@@ -2,13 +2,11 @@ import json
 import random
 import time
 
-from KJH.KJH_main import KJH_run
-from util import *
-
-#
-# from PWB.PWB_vrpb import check_feasible_wb, plot_vrpb_wb
-#
-
+from KJH.ILSRVND import *
+from PWB.KJH_vrpb import *
+from KJH.optimizer import solv_SC
+from PWB.KJH_main import *
+from PWB.PWB_main import PWB_run
 from util import *
 
 
@@ -40,41 +38,33 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
     with open(problem, "w", encoding='utf-8') as f:
         json.dump(problem_info, f, ensure_ascii=False, indent=4)
-
-NN = 100
-CP = 3000
-line_p = 0.7
-#instance_generator(f"./instances/problem_{NN}_{line_p}.json", NN, CP, line_p=0.7)
-print("done")
+# NN = 100
+# CP = 3000
+# line_p = 0.7
+# instance_generator(f"./instances/problem_{NN}_{line_p}.json", NN, CP, line_p=0.7)
+# print("done")
 
 def main():
     N_list = [50, 70, 100, 130, 150]
     line_p_list = [0.5, 0.7, 0.85]
 
     capa = 3200
-
     for N in N_list:
         for line_p in line_p_list:
             title = f"problem_{N}_{line_p}"
             time_limit = 60
             problem = f"instances/problem_{N}_{line_p}.json"
-            try:
-                with open(problem, "r", encoding='utf-8') as f:
-                    problem_info = json.load(f)
 
-            except FileNotFoundError:
-                instance_generator(problem, N=N, line_p=line_p, capa=capa)
-                with open(problem, "r", encoding='utf-8') as f:
+            with open(problem, "r", encoding='utf-8') as f:
                     problem_info = json.load(f)
             print("------------------------")
             start = time.time()
-            sol = KJH_run(problem_info, time_limit)
+            sol = PWB_run(problem_info)
             elapsed = round(time.time() - start, 2)
 
             obj = check_feasible(problem_info, sol, elapsed, time_limit)
+            plot_vrpb(problem_info, sol, f'{N}-{line_p} obj : {obj} elapsed : {elapsed}')
             print(title, obj, elapsed)
-    # plot_vrpb(problem_info, sol, f'obj : {obj} elapsed : {elapsed}')
-
 
 if __name__ == '__main__':
-    main(NN, CP, line_p)
+    main()
