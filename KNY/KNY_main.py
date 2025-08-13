@@ -351,10 +351,8 @@ def convert_kjh_problem(problem_info: dict):
     )
 
 
-def load_kjh_json(path: str):
-    with open(path, "r", encoding="utf-8") as f:
-        info = json.load(f)
-    return convert_kjh_problem(info)
+def load_kjh_json(problem_info):
+    return convert_kjh_problem(problem_info)
 
 
 def to_kjh_routes(routes, depot_idx):
@@ -513,11 +511,10 @@ def log_raw_result(filepath, result_data):
 # 7) 메인 드라이버 (완전히 수정된 버전)
 # ─────────────────────────────────────────────────────────────
 
-def run_kjh_problem(problem_path: Path):
+def kny_run(problem_info):
     global cache
 
-    with open(problem_path, "r", encoding="utf-8") as f:
-        problem_info = json.load(f)
+
     K = problem_info["K"]
 
     (
@@ -529,7 +526,7 @@ def run_kjh_problem(problem_path: Path):
         depot_idx,
         node_types,
         coords,
-    ) = load_kjh_json(problem_path)
+    ) = load_kjh_json(problem_info)
 
     # DistanceCache 초기화
     cache = DistanceCache(dist)
@@ -586,81 +583,81 @@ def run_kjh_problem(problem_path: Path):
     # check_feasible을 위해 node_types를 KJH 형식으로 변환
     problem_info_copy = problem_info.copy()  # 원본 보존
     problem_info_copy["node_types"] = to_kjh_types(node_types)  # ★ 이 줄 활성화!
-
-    obj = check_feasible(problem_info_copy, to_kjh_routes(best_routes, depot_idx), 0, timelimit=60)
-    if obj:
-        print(f"[✅] check_feasible 통과! obj = {obj:.1f}")
-    else:
-        print("[❌] check_feasible 실패")
-        # 💡 추가: 어떤 라우트가 실패 원인인지 fast_feasible_check로 디버깅
-        print("\n[🛠 check_feasible 디버깅 시작]")
-        print(f"Internal node_types (0=pickup, 1=delivery): {node_types[:10]}...")
-        print(f"KJH node_types (0=depot, 1=delivery, 2=pickup): {to_kjh_types(node_types)[:10]}...")
-        for r_idx, route in enumerate(best_routes):
-            if not fast_feasible_check(route, node_types, demands, capa, depot_idx):
-                print(f"[❌] Route {r_idx} violates FFC: {route}")
-            else:
-                print(f"[✅] Route {r_idx} passes FFC")
-        print("[🛠 check_feasible 디버깅 끝]\n")
-
-    # 캐시 통계 출력
-    print(f"[INFO] 캐시 통계 - Route 캐시: {len(cache.cache)}개, 삽입 캐시: {len(cache.insertion_cache)}개")
-
-    capa_val = capa  # 편의상 별도 변수
-
-    visited = set(n for r in best_routes for n in r if n != depot_idx)
-    expected = set(i for i in range(len(node_types)) if i != depot_idx)
-    missed = expected - visited
-    if missed:
-        print(f"[❌] check_feasible failed - 미방문 노드: {sorted(missed)}")
-    else:
-        print(f"[✅] 모든 노드 방문 완료")
-
-    for k, r in enumerate(best_routes):
-        # -------------- 적재율 계산 ------------------ #
-        delivery_load = sum(demands[n] for n in r if node_types[n] == 1)
-        # depot 출발 시 적재량 = 배송 총수요
-        utilisation = delivery_load / capa_val  # 0.0 ~ 1.0
-        print(f"vehicle {k:2d}: {r}")
-        print(f"           ↳ 출발 적재량 = {delivery_load:>6.1f} / {capa_val}  "
-              f"(utilisation {utilisation:5.1%})")  # ★
-
-    # 1. 최종 통계 계산
-    final_stats = get_solution_stats(best_routes, dist, demands, capa, node_types)
-
-    # 2. 로그에 기록할 데이터 구성
-    total_elapsed = init_elapsed + alns_elapsed + post_proc_elapsed  # 전체 시간 계산
-    log_data = {
-        'instance': problem_path.stem,  # 파일명 (e.g., 'problem_150_0.7')
-        'obj': final_stats['obj'],
-        'mean_dist': round(final_stats['mean_dist'], 2),
-        'std_dist': round(final_stats['std_dist'], 2),
-        'max_dist': round(final_stats['max_dist'], 2),
-        'min_dist': round(final_stats['min_dist'], 2),
-        'std_line_load': round(final_stats['std_load'], 2),
-        'max_line_load': round(final_stats['max_load'], 2),
-        'min_line_load': round(final_stats['min_load'], 2),
-        'std_back_load': round(final_stats['std_back_load'], 2),
-        'max_back_load': round(final_stats['max_back_load'], 2),
-        'min_back_load': round(final_stats['min_back_load'], 2),
-        'num_vehicle': final_stats['num_vehicles'],
-        'alns_time': round(alns_elapsed, 2),      # ALNS 실행 시간
-        'total_time': round(total_elapsed, 2),    # 초기해+ALNS+후처리 전체 시간
-        'method': 1  # 나중에 다른 알고리즘과 비교를 위한 식별자
-        # 필요하다면 다른 파라미터 (e.g., ALNS 반복 횟수) 등을 추가할 수 있습니다.
-    }
-    log_data.update(experiment_notes)
-
-    # 3. CSV 파일에 기록
-    if ENABLE_LOGGING:
-        log_raw_result('raw_results.csv', log_data)
-        print(f"\n[📝] 'raw_results.csv' 파일에 결과가 기록되었습니다.")
-    else:
-        print(f"\n[🟡] 로깅 비활성화됨: 'raw_results.csv'에 저장하지 않습니다.")
-
-    # 기존 수동 매핑 코드를 다음으로 교체
-    plot_problem_info = prepare_plot_data(coords, node_types, problem_info)
-    plot_vrpb(plot_problem_info, best_routes, f"VRPB obj: {best_cost:.0f}")
+    return to_kjh_routes(best_routes, depot_idx)
+    # obj = check_feasible(problem_info_copy, to_kjh_routes(best_routes, depot_idx), 0, timelimit=60)
+    # if obj:
+    #     print(f"[✅] check_feasible 통과! obj = {obj:.1f}")
+    # else:
+    #     print("[❌] check_feasible 실패")
+    #     # 💡 추가: 어떤 라우트가 실패 원인인지 fast_feasible_check로 디버깅
+    #     print("\n[🛠 check_feasible 디버깅 시작]")
+    #     print(f"Internal node_types (0=pickup, 1=delivery): {node_types[:10]}...")
+    #     print(f"KJH node_types (0=depot, 1=delivery, 2=pickup): {to_kjh_types(node_types)[:10]}...")
+    #     for r_idx, route in enumerate(best_routes):
+    #         if not fast_feasible_check(route, node_types, demands, capa, depot_idx):
+    #             print(f"[❌] Route {r_idx} violates FFC: {route}")
+    #         else:
+    #             print(f"[✅] Route {r_idx} passes FFC")
+    #     print("[🛠 check_feasible 디버깅 끝]\n")
+    #
+    # # 캐시 통계 출력
+    # print(f"[INFO] 캐시 통계 - Route 캐시: {len(cache.cache)}개, 삽입 캐시: {len(cache.insertion_cache)}개")
+    #
+    # capa_val = capa  # 편의상 별도 변수
+    #
+    # visited = set(n for r in best_routes for n in r if n != depot_idx)
+    # expected = set(i for i in range(len(node_types)) if i != depot_idx)
+    # missed = expected - visited
+    # if missed:
+    #     print(f"[❌] check_feasible failed - 미방문 노드: {sorted(missed)}")
+    # else:
+    #     print(f"[✅] 모든 노드 방문 완료")
+    #
+    # for k, r in enumerate(best_routes):
+    #     # -------------- 적재율 계산 ------------------ #
+    #     delivery_load = sum(demands[n] for n in r if node_types[n] == 1)
+    #     # depot 출발 시 적재량 = 배송 총수요
+    #     utilisation = delivery_load / capa_val  # 0.0 ~ 1.0
+    #     print(f"vehicle {k:2d}: {r}")
+    #     print(f"           ↳ 출발 적재량 = {delivery_load:>6.1f} / {capa_val}  "
+    #           f"(utilisation {utilisation:5.1%})")  # ★
+    #
+    # # 1. 최종 통계 계산
+    # final_stats = get_solution_stats(best_routes, dist, demands, capa, node_types)
+    #
+    # # 2. 로그에 기록할 데이터 구성
+    # total_elapsed = init_elapsed + alns_elapsed + post_proc_elapsed  # 전체 시간 계산
+    # log_data = {
+    #     'instance': problem_path.stem,  # 파일명 (e.g., 'problem_150_0.7')
+    #     'obj': final_stats['obj'],
+    #     'mean_dist': round(final_stats['mean_dist'], 2),
+    #     'std_dist': round(final_stats['std_dist'], 2),
+    #     'max_dist': round(final_stats['max_dist'], 2),
+    #     'min_dist': round(final_stats['min_dist'], 2),
+    #     'std_line_load': round(final_stats['std_load'], 2),
+    #     'max_line_load': round(final_stats['max_load'], 2),
+    #     'min_line_load': round(final_stats['min_load'], 2),
+    #     'std_back_load': round(final_stats['std_back_load'], 2),
+    #     'max_back_load': round(final_stats['max_back_load'], 2),
+    #     'min_back_load': round(final_stats['min_back_load'], 2),
+    #     'num_vehicle': final_stats['num_vehicles'],
+    #     'alns_time': round(alns_elapsed, 2),      # ALNS 실행 시간
+    #     'total_time': round(total_elapsed, 2),    # 초기해+ALNS+후처리 전체 시간
+    #     'method': 1  # 나중에 다른 알고리즘과 비교를 위한 식별자
+    #     # 필요하다면 다른 파라미터 (e.g., ALNS 반복 횟수) 등을 추가할 수 있습니다.
+    # }
+    # log_data.update(experiment_notes)
+    #
+    # # 3. CSV 파일에 기록
+    # if ENABLE_LOGGING:
+    #     log_raw_result('raw_results.csv', log_data)
+    #     print(f"\n[📝] 'raw_results.csv' 파일에 결과가 기록되었습니다.")
+    # else:
+    #     print(f"\n[🟡] 로깅 비활성화됨: 'raw_results.csv'에 저장하지 않습니다.")
+    #
+    # # 기존 수동 매핑 코드를 다음으로 교체
+    # plot_problem_info = prepare_plot_data(coords, node_types, problem_info)
+    # plot_vrpb(plot_problem_info, best_routes, f"VRPB obj: {best_cost:.0f}")
 
 
 if __name__ == "__main__":
@@ -673,4 +670,4 @@ if __name__ == "__main__":
 
     for i in range(num_runs):
         print(f"\n{'=' * 20} 실행 {i + 1}/{num_runs} {'=' * 20}")
-        run_kjh_problem(instance_path)
+        kny_run(instance_path)

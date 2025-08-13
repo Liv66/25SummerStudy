@@ -185,16 +185,7 @@ def save_experiment_results(instance_name, run_index, execution_time, final_solu
     return summary_row
 
 
-def run_single_experiment(aco_class, instance_path, run_index):
-    """
-    단일 인스턴스에 대해 한 번의 실험을 실행하고 결과를 반환합니다.
-    """
-    print(f"\n--- 실험 시작: {os.path.basename(instance_path)} (실행 {run_index}) ---")
-
-    # 1. JSON 파일에서 문제 데이터 읽어오기
-    with open(instance_path, 'r', encoding='utf-8') as f:
-        problem_data = json.load(f)
-
+def run_single_experiment(aco_class, problem_data, run_index):
     N = problem_data['N']
     K = problem_data['K']
     capa = problem_data['capa']
@@ -228,52 +219,20 @@ def run_single_experiment(aco_class, instance_path, run_index):
     return final_solution, execution_time, all_node_coord, demands, node_types_dict, K, capa
 
 
-def OSM_main():
+def OSM_run(problem_info):
     """
     'instances' 폴더의 모든 문제에 대해 실험을 자동 실행합니다.
     """
-    # --- 1. 실험 환경 설정 ---
-    instances_dir = 'instances'
-    instance_files = glob.glob(os.path.join(instances_dir, '*.json'))
-    num_runs_per_instance = 3
-    all_summary_data = []
 
-    if not instance_files:
-        print(f"'{instances_dir}' 폴더에 실험할 .json 파일이 없습니다. 스크립트를 종료합니다.")
-        return
+    final_solution, exec_time, nodes_coord, demands, node_types, K, capa = run_single_experiment(ACO_VRPB, problem_info, run_index)
+    return final_solution
 
-    print(f"총 {len(instance_files)}개의 인스턴스에 대해 각 {num_runs_per_instance}회 실험을 시작합니다.")
-    
-    # --- 2. 모든 인스턴스에 대한 실험 루프 ---
-    for instance_path in instance_files:
-        instance_name = os.path.splitext(os.path.basename(instance_path))[0]
-        
-        for run_index in range(1, num_runs_per_instance + 1):
-            # 단일 실험 실행
-            final_solution, exec_time, nodes_coord, demands, node_types, K, capa = run_single_experiment(ACO_VRPB, instance_path, run_index)
-            
-            # 결과 저장 및 CSV 데이터 수집
-            summary_row = save_experiment_results(instance_name, run_index, exec_time, final_solution, nodes_coord, demands, node_types, K, capa)
-            all_summary_data.append(summary_row)
-
-    # --- 3. 최종 CSV 요약 파일 저장 ---
-    csv_path = "results/experiment_summary.csv"
-    os.makedirs("results", exist_ok=True)
-    
-    if all_summary_data:
-        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=all_summary_data[0].keys())
-            writer.writeheader()
-            writer.writerows(all_summary_data)
-        print(f"\n\n모든 실험 요약 CSV 파일 저장 완료: {csv_path}")
-    
-    print("\ 모든 실험이 성공적으로 완료되었습니다. ")
 
 
 if __name__ == '__main__':
     # 메인 함수로 전체 실험 프레임워크를 호출
     start_overall_time = time.time()
-    OSM_main()
+    OSM_run()
     end_overall_time = time.time()
     print(f"\n--- 총 실행 시간: {end_overall_time - start_overall_time:.2f} 초 ---")
 

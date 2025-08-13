@@ -2,8 +2,14 @@ import json
 import random
 import time
 
+from JHJ.origin_model.main_v2 import jhj_main
 from KJH.KJH_main import KJH_run
+from KNY.KNY_main import kny_run
+from OSM.OSM_main import OSM_run
+from Ock.Ock_main import Ock_run
+from PWB.PWB_main import PWB_run
 from column_generation import run_master
+from cwj.cwj_main import cwj_run
 from util import *
 
 
@@ -35,11 +41,8 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
     with open(problem, "w", encoding='utf-8') as f:
         json.dump(problem_info, f, ensure_ascii=False, indent=4)
-# NN = 100
-# CP = 3000
-# line_p = 0.7
-# instance_generator(f"./instances/problem_{NN}_{line_p}.json", NN, CP, line_p=0.7)
-# print("done")
+
+
 
 def main():
     # N_list = [50, 70, 100, 130, 150]
@@ -47,6 +50,8 @@ def main():
     capa = 3200
     N_list = [150]
     line_p_list = [0.5]
+    algorithms = [cwj_run, jhj_main, KJH_run, Ock_run, kny_run, OSM_run, PWB_run]
+
 
     for N in N_list:
         for line_p in line_p_list:
@@ -55,15 +60,18 @@ def main():
             problem = f"instances/problem_{N}_{line_p}.json"
 
             with open(problem, "r", encoding='utf-8') as f:
-                    problem_info = json.load(f)
+                problem_info = json.load(f)
             print("------------------------")
-            start = time.time()
-            sol = run_master(problem_info, time_limit, False)
-            elapsed = round(time.time() - start, 2)
+            for i in range(len(algorithms)):
+                print("###########", i)
+                start = time.time()
+                sol = run_master(problem_info, time_limit, False)
+                elapsed = round(time.time() - start, 2)
 
-            obj = check_feasible(problem_info, sol, elapsed, time_limit)
+                obj = check_feasible(problem_info, sol, elapsed, time_limit)
 
-            print(title, obj, elapsed)
+                print(title, obj, elapsed)
+
 
 if __name__ == '__main__':
     main()

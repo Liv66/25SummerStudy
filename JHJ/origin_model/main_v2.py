@@ -43,19 +43,19 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
         json.dump(problem_info, f, ensure_ascii=False, indent=4)
 
 
-def main():
-    N = 50
-    line_p = 0.7
-    capa = 2000
-    problem = f"instances/problem_{N}_{line_p}.json"
-    try:
-        with open(problem, "r", encoding='utf-8') as f:
-            problem_info = json.load(f)
-
-    except FileNotFoundError:
-        instance_generator(problem, N=N, line_p=line_p, capa=capa)
-        with open(problem, "r", encoding='utf-8') as f:
-            problem_info = json.load(f)
+def jhj_main(problem_info):
+    # N = 50
+    # line_p = 0.7
+    # capa = 2000
+    # problem = f"instances/problem_{N}_{line_p}.json"
+    # try:
+    #     with open(problem, "r", encoding='utf-8') as f:
+    #         problem_info = json.load(f)
+    #
+    # except FileNotFoundError:
+    #     instance_generator(problem, N=N, line_p=line_p, capa=capa)
+    #     with open(problem, "r", encoding='utf-8') as f:
+    #         problem_info = json.load(f)
             
     start = time.time()
 
@@ -78,15 +78,16 @@ def main():
     print(solution)
     distance_cost = sum(r.get_distance_cost() for r in solution.get_routes())
     print(f"Final Distance Cost: {distance_cost:.2f}")
-    
-    print("\n--- Feasibility Check ---")
-    obj = check_feasible(problem_info, final_routes, elapsed, time_limit)
-    if obj > 0:
-        print(f"Feasibility Check PASSED. Objective value: {obj:.2f}")
-    else:
-        print("Feasibility Check FAILED!")
-        
-    plot_vrpb(problem_info, final_routes, f'Optimized VRPB Solution\nObj: {obj:.2f}')
+
+    return final_routes
+    # print("\n--- Feasibility Check ---")
+    # obj = check_feasible(problem_info, final_routes, elapsed, time_limit)
+    # if obj > 0:
+    #     print(f"Feasibility Check PASSED. Objective value: {obj:.2f}")
+    # else:
+    #     print("Feasibility Check FAILED!")
+    #
+    # plot_vrpb(problem_info, final_routes, f'Optimized VRPB Solution\nObj: {obj:.2f}')
 
 if __name__ == '__main__':
-    main()
+    jhj_main()

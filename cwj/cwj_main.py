@@ -61,7 +61,7 @@ def VRPB_CG_Heuristic(problem_info):
 
     return best_solution
 
-def cwj_main(problem_info):
+def cwj_run(problem_info):
     K = problem_info['K']
     node_type = problem_info['node_types']
     node_demand = problem_info['node_demands']
@@ -79,12 +79,13 @@ def cwj_main(problem_info):
     print("==========================================")
 
     solution = VRPB_CG_Heuristic(problem_info)
-    print("Final solution:")
-    total_cost = 0
-    for route, cost in solution:
-        print(f"Route: {route} | Cost: {int(cost)}")
-        total_cost += cost
-    print(f"Total Cost: {int(total_cost)}")
+    return solution
+    # print("Final solution:")
+    # total_cost = 0
+    # for route, cost in solution:
+    #     print(f"Route: {route} | Cost: {int(cost)}")
+    #     total_cost += cost
+    # print(f"Total Cost: {int(total_cost)}")
 
 
 if __name__ == '__main__':
@@ -92,7 +93,7 @@ if __name__ == '__main__':
         instance = json.load(f)
     
     start_time = time.time() 
-    cwj_main(instance)
+    cwj_run(instance)
     end_time = time.time()
     elapsed = end_time - start_time
     print(f"\n실행 시간: {elapsed:.2f}초")

@@ -14,7 +14,7 @@ import glob
 import validation as v
 
 
-def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000):
+def Ock_run(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000):
 
     # 파라미터 설정
     nodes, NUM_LINEHAUL, NUM_BACKHAUL, NUM_VEHICLES, CAPACITY, inverse_id_map = ic.convert_data(problem_info)
@@ -73,7 +73,7 @@ if __name__ == "__main__":
             problem_info = ic.load_from_json(i)
             
             # Ock_main 함수 실행
-            sol, cost, epalsed_time, nodes, inverse_id_map = Ock_main(problem_info, iterations=1000000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000)
+            sol, cost, epalsed_time, nodes, inverse_id_map = Ock_run(problem_info, iterations=1000000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000)
             print(f"\n--- {i} 최종 결과 ---")
             print(f"{i} 총 실행 시간: {epalsed_time:.2f}초")
             print(f"{i} 최종 비용: {cost:.2f}")
@@ -117,7 +117,7 @@ if __name__ != "__main__":
             problem_info = ic.load_from_json(rf"C:\Users\user\OneDrive - pusan.ac.kr\바탕 화면\옥중석\학교\대학원\여름 방학 스터디\code\{i}")
             
             # Ock_main 함수 실행
-            sol, cost, epalsed_time, nodes = Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=2000)
+            sol, cost, epalsed_time, nodes = Ock_run(problem_info, iterations=10000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=2000)
             # print(f"\n--- {i} 최종 결과 ---")
             # print(f"{i} 총 실행 시간: {epalsed_time:.2f}초")
             # print(f"{i} 최종 비용: {cost:.2f}")
