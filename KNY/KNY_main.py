@@ -1,5 +1,5 @@
 """
-KNY_main_improved.py  —  기존 KNY_VRPB 파이프라인 + 성능 최적화 패치 + DistanceCache 활용
+KNY_main_improved.py  —  기존 KNY_VRPB 파이프라인 + 성능 최적화 패치
 ──────────────────────────────────────────────────────────────────────────
 * 달라진 점
   1. fast_feasible_check  : KJH 변환 없이 경량 VRPB 제약 검사
@@ -17,9 +17,15 @@ import math
 import time
 from pathlib import Path
 from typing import List
+import csv  # <-- 추가
+import os   # <-- 추가
+import numpy as np # <-- 추가
 
 from util import get_distance, plot_vrpb, check_feasible
 from KNY_alns import alns_vrpb
+
+# ▼▼▼ 여기에 스위치를 추가하세요 ▼▼▼
+ENABLE_LOGGING = True  # True로 바꾸면 다시 저장이 활성화됩니다.
 
 #random.seed(42)
 
@@ -443,6 +449,67 @@ def prepare_plot_data(coords, node_types_internal, problem_info):
 
     return plot_problem_info
 # ─────────────────────────────────────────────────────────────
+def get_solution_stats(routes, dist, demands, capa, node_types):
+    """
+    해(solution)에 대한 상세 통계 정보를 계산합니다.
+    """
+    if not routes:
+        return {
+            'obj': float('inf'), 'num_vehicles': 0, 'mean_dist': 0, 'std_dist': 0,
+            'min_dist': 0, 'max_dist': 0, 'mean_load': 0, 'std_load': 0,
+            'min_load': 0, 'max_load': 0, 'mean_back_load': 0, 'std_back_load': 0,
+            'min_back_load': 0, 'max_back_load': 0
+        }
+
+    route_dists = [sum(dist[route[i]][route[i + 1]] for i in range(len(route) - 1)) for route in routes]
+
+    # 배송(delivery) 적재율 계산
+    delivery_loads = [sum(demands[n] for n in r if node_types[n] == 1) for r in routes]
+    delivery_utilization = [load / capa if capa > 0 else 0 for load in delivery_loads]
+
+    # 수거(pickup/backhaul) 적재량 계산
+    backhaul_loads = []
+    for r in routes:
+        in_pick_phase = False
+        current_backhaul_load = 0
+        for node_idx in range(1, len(r) - 1):
+            if node_types[r[node_idx - 1]] == 1 and node_types[r[node_idx]] == 0:  # 배송 -> 수거 전환
+                in_pick_phase = True
+            if in_pick_phase and node_types[r[node_idx]] == 0:
+                current_backhaul_load += demands[r[node_idx]]
+        backhaul_loads.append(current_backhaul_load)
+
+    stats = {
+        'obj': sum(route_dists),
+        'num_vehicles': len(routes),
+        'mean_dist': np.mean(route_dists),
+        'std_dist': np.std(route_dists),
+        'min_dist': np.min(route_dists),
+        'max_dist': np.max(route_dists),
+        'mean_load': np.mean(delivery_utilization) * 100,  # %단위로
+        'std_load': np.std(delivery_utilization) * 100,
+        'min_load': np.min(delivery_utilization) * 100,
+        'max_load': np.max(delivery_utilization) * 100,
+        'mean_back_load': np.mean(backhaul_loads),
+        'std_back_load': np.std(backhaul_loads),
+        'min_back_load': np.min(backhaul_loads),
+        'max_back_load': np.max(backhaul_loads)
+    }
+    return stats
+
+
+def log_raw_result(filepath, result_data):
+    """
+    결과 데이터를 CSV 파일에 한 줄 추가합니다.
+    """
+    file_exists = os.path.isfile(filepath)
+
+    with open(filepath, mode='a', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=result_data.keys())
+        if not file_exists:
+            writer.writeheader()  # 파일이 없으면 헤더를 씁니다.
+        writer.writerow(result_data)
+# ─────────────────────────────────────────────────────────────
 # 7) 메인 드라이버 (완전히 수정된 버전)
 # ─────────────────────────────────────────────────────────────
 
@@ -472,34 +539,45 @@ def run_kjh_problem(problem_path: Path):
     if math.ceil(total_delivery / capa) > K:
         raise ValueError("Instance infeasible: delivery 총수요가 K·capa 를 초과")
 
+    # 1. 초기 해 생성 시간 측정
+    init_start = time.time()
     init_routes = improved_greedy_vrpb(
-        delivery_idx,
-        pickup_idx,
-        demands,
-        capa,
-        dist,
-        depot_idx,
-        node_types,
-        K,
+        delivery_idx, pickup_idx, demands, capa, dist, depot_idx, node_types, K
     )
-
-    print(f"[INFO] Initial route count: {len(init_routes)}")
-
-    # ── ALNS
-    start = time.time()
+    init_elapsed = time.time() - init_start
+    print(f"[⏱️] 초기 해 생성 시간: {init_elapsed:.2f}초")
+    print(f"[INFO] Initial route count: {len(init_routes)}")  # 기존 print문 유지
+    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+    # === (수동) 실험 내용 기록 ===
+    # 실행 전에 이 부분에 어떤 실험을 했는지 직접 작성하세요.
+    experiment_notes = {
+        '수정한 부분': '없음'
+    }
+    print(f"[🔬] 이번 실행 내용: {experiment_notes['수정한 부분']}")
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+    # 2. ALNS 시간 측정
+    alns_start = time.time()
     best_routes, _ = alns_vrpb(
-        init_routes,
-        dist,
-        node_types,
-        demands,
-        capa,
-        depot_idx,
-        max_vehicles=K,
-        time_limit=60,
+        init_routes, dist, node_types, demands, capa, depot_idx,
+        max_vehicles=K, time_limit=58
     )
-    elapsed = time.time() - start
+    alns_elapsed = time.time() - alns_start
+    print(f"[⏱️] ALNS 실행 시간: {alns_elapsed:.2f}초")
 
+    # 3. 후처리 시간 측정
+    post_proc_start = time.time()
     best_routes = cross_route_2opt_star(best_routes, dist, node_types, demands, capa, depot_idx)
+    post_proc_elapsed = time.time() - post_proc_start
+    print(f"[⏱️] 후처리(2-opt*) 시간: {post_proc_elapsed:.2f}초")
+
+    # 4. 총 실행 시간 측정
+    total_elapsed = init_elapsed + alns_elapsed + post_proc_elapsed
+
+    print(f"[⏱️] 후처리(2-opt*) 시간: {post_proc_elapsed:.2f}초")
+    print(f"──────────────────────────────────────────────────────────")
+    print(
+        f"[✅] 총 실행 시간: {total_elapsed:.2f}초 (초기해: {init_elapsed:.2f}초 + ALNS: {alns_elapsed:.2f}초 + 후처리: {post_proc_elapsed:.2f}초)")
+    print(f"──────────────────────────────────────────────────────────")
 
     # 캐시를 사용한 최종 비용 계산
     best_cost = sum(cache.get_route_cost(r) for r in best_routes)
@@ -546,6 +624,40 @@ def run_kjh_problem(problem_path: Path):
         print(f"vehicle {k:2d}: {r}")
         print(f"           ↳ 출발 적재량 = {delivery_load:>6.1f} / {capa_val}  "
               f"(utilisation {utilisation:5.1%})")  # ★
+
+    # 1. 최종 통계 계산
+    final_stats = get_solution_stats(best_routes, dist, demands, capa, node_types)
+
+    # 2. 로그에 기록할 데이터 구성
+    total_elapsed = init_elapsed + alns_elapsed + post_proc_elapsed  # 전체 시간 계산
+    log_data = {
+        'instance': problem_path.stem,  # 파일명 (e.g., 'problem_150_0.7')
+        'obj': final_stats['obj'],
+        'mean_dist': final_stats['mean_dist'],
+        'std_dist': final_stats['std_dist'],
+        'max_dist': final_stats['max_dist'],
+        'min_dist': final_stats['min_dist'],
+        'std_line_load': final_stats['std_load'],
+        'max_line_load': final_stats['max_load'],
+        'min_line_load': final_stats['min_load'],
+        'std_back_load': final_stats['std_back_load'],
+        'max_back_load': final_stats['max_back_load'],
+        'min_back_load': final_stats['min_back_load'],
+        'num_vehicle': final_stats['num_vehicles'],
+        'alns_time': round(alns_elapsed, 2),      # ALNS 실행 시간
+        'total_time': round(total_elapsed, 2),    # 초기해+ALNS+후처리 전체 시간
+        'method': 1  # 나중에 다른 알고리즘과 비교를 위한 식별자
+        # 필요하다면 다른 파라미터 (e.g., ALNS 반복 횟수) 등을 추가할 수 있습니다.
+    }
+    log_data.update(experiment_notes)
+
+    # 3. CSV 파일에 기록
+    if ENABLE_LOGGING:
+        log_raw_result('raw_results.csv', log_data)
+        print(f"\n[📝] 'raw_results.csv' 파일에 결과가 기록되었습니다.")
+    else:
+        print(f"\n[🟡] 로깅 비활성화됨: 'raw_results.csv'에 저장하지 않습니다.")
+
     # 기존 수동 매핑 코드를 다음으로 교체
     plot_problem_info = prepare_plot_data(coords, node_types, problem_info)
     plot_vrpb(plot_problem_info, best_routes, f"VRPB obj: {best_cost:.0f}")
@@ -553,4 +665,12 @@ def run_kjh_problem(problem_path: Path):
 
 if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parents[1]
-    run_kjh_problem(ROOT / "instances" / "problem_150_0.85.json")
+
+    # 여러 번 실행 예시 (예: 5회)
+    instance_path = ROOT / "instances" / "problem_50_0.5.json"
+    num_runs = 3
+    print(f"'{instance_path.name}' 인스턴스를 {num_runs}회 실행합니다.")
+
+    for i in range(num_runs):
+        print(f"\n{'=' * 20} 실행 {i + 1}/{num_runs} {'=' * 20}")
+        run_kjh_problem(instance_path)

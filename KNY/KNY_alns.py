@@ -110,7 +110,7 @@ def alns_vrpb(
         capa: int,
         depot_idx: int,
         max_vehicles: int,
-        time_limit: float = 60.0,
+        time_limit: float = 55.0,
 ) -> tuple[list[list[int]], float]:
     print("[INFO] Start Improved ALNS with Enhanced Crossing Resolution")
     PENALTY_FACTOR = 10000000
@@ -518,15 +518,18 @@ def alns_vrpb(
         unassigned.clear()
         return partial_routes
 
-    def intensive_local_search(routes):
-        """집중적인 지역 탐색"""
+    def intensive_local_search(routes, start_time, time_limit):
+        """집중적인 지역 탐색 (시간 제한 인지)"""
         improved = True
         search_count = 0
 
         while improved and search_count < 5:
+            # 🛡️ 여기서 전체 시간 제한을 확인하고, 넘었으면 즉시 중단
+            if time.time() - start_time >= time_limit:
+                break
+
             improved = False
             search_count += 1
-
             # 1. 경로 내 2-opt
             if two_opt_intra_route(routes):
                 improved = True
@@ -761,7 +764,7 @@ def alns_vrpb(
 
         # 집중적 지역 탐색 (더 자주 수행)
         if iteration % 20 == 0:
-            if intensive_local_search(cur_routes):
+            if intensive_local_search(cur_routes, start, time_limit):
                 new_cost = calculate_total_cost(cur_routes)
                 if new_cost < cur_cost:
                     cur_cost = new_cost
@@ -854,7 +857,7 @@ def alns_vrpb(
 
     # 최종 집중적 지역 탐색
     print("[INFO] Final intensive local search...")
-    final_improved = intensive_local_search(best_routes)
+    final_improved = intensive_local_search(best_routes, start, time_limit)
     if final_improved:
         final_cost = calculate_total_cost(best_routes)
         if final_cost < best_cost:
