@@ -1,5 +1,5 @@
 import random
-from Route import *
+from JHJ.Route import *
 
 class GreedyConstructionStrategy:
     # 총 비용이 가장 적게 드는 위치로 노드 삽입

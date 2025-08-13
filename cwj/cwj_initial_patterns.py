@@ -1,5 +1,5 @@
 import random
-from cwj_pricing_problem import labeling_algorithm
+from cwj.cwj_pricing_problem import labeling_algorithm
 
 def generate_initial_patterns(K, Q, node_types, node_demands, dist_mat):
     """

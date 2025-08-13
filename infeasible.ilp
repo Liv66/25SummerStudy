@@ -3,6 +3,6 @@
 Minimize
  
 Subject To
- visit_2: >= 1
+ visit_8: >= 1
 Bounds
 End

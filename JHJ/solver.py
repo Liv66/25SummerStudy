@@ -1,7 +1,7 @@
 import time
-from construction import GreedyConstructionStrategy
-from method import FirstImprovementStrategy
-from Solution import CVRPBSolution
+from JHJ.construction import GreedyConstructionStrategy
+from JHJ.method import FirstImprovementStrategy
+from JHJ.Solution import CVRPBSolution
 import random
 import copy
 

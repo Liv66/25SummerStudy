@@ -1,12 +1,12 @@
 # cwj_main.py
 import json
 import time
-from cwj_master_problem import solve_master_problem
-from cwj_initial_patterns import generate_initial_patterns
-from cwj_dual_route_generator import generate_dual_routes
-from cwj_local_search import improve_solution
-from cwj_master_postprocess import generate_augmented_routes
-from cwj_phase2_postprocess import prune_redundant_customers
+from cwj.cwj_master_problem import solve_master_problem
+from cwj.cwj_initial_patterns import generate_initial_patterns
+from cwj.cwj_dual_route_generator import generate_dual_routes
+from cwj.cwj_local_search import improve_solution
+from cwj.cwj_master_postprocess import generate_augmented_routes
+from cwj.cwj_phase2_postprocess import prune_redundant_customers
 
 
 def VRPB_CG_Heuristic(problem_info):

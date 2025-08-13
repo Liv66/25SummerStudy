@@ -1,7 +1,7 @@
 import random
 import math
-from Ock_heuristic import destroy_solution, repair_solution # heuristic.py 파일에서 클래스 가져오기
-from Ock_heuristic import * # heuristic.py 파일에서 함수 가져오기
+from Ock.Ock_heuristic import destroy_solution, repair_solution # heuristic.py 파일에서 클래스 가져오기
+from Ock.Ock_heuristic import * # heuristic.py 파일에서 함수 가져오기
 import sys
 import time
 

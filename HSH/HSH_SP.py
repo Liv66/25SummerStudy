@@ -1,8 +1,8 @@
 # HSH_SP: Set Partitioning
 from gurobipy import Model, GRB, quicksum
 from typing import List, Dict
-from HSH_loader import load_instance_from_json
-from HSH_GeneratePool import run_pooling_loop
+from HSH.HSH_loader import load_instance_from_json
+from HSH.HSH_GeneratePool import run_pooling_loop
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
 import time, random

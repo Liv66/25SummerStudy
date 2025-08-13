@@ -5,8 +5,8 @@ import glob
 import csv
 import matplotlib.pyplot as plt
 
-from OSM_util import plot_cvrp
-from OSM_ACO import ACO_VRPB
+from OSM.OSM_util import plot_cvrp
+from OSM.OSM_ACO import ACO_VRPB
 import numpy
 
 class NumpyEncoder(json.JSONEncoder):
@@ -185,7 +185,7 @@ def save_experiment_results(instance_name, run_index, execution_time, final_solu
     return summary_row
 
 
-def run_single_experiment(aco_class, problem_data, run_index):
+def run_single_experiment(aco_class, problem_data):
     N = problem_data['N']
     K = problem_data['K']
     capa = problem_data['capa']
@@ -214,8 +214,7 @@ def run_single_experiment(aco_class, problem_data, run_index):
     end_time = time.time()
     execution_time = end_time - start_time
     
-    print(f"--- 실험 종료: {os.path.basename(instance_path)} (실행 {run_index}) | 소요 시간: {execution_time:.2f}초 ---")
-    
+
     return final_solution, execution_time, all_node_coord, demands, node_types_dict, K, capa
 
 
@@ -224,7 +223,7 @@ def OSM_run(problem_info):
     'instances' 폴더의 모든 문제에 대해 실험을 자동 실행합니다.
     """
 
-    final_solution, exec_time, nodes_coord, demands, node_types, K, capa = run_single_experiment(ACO_VRPB, problem_info, run_index)
+    final_solution, exec_time, nodes_coord, demands, node_types, K, capa = run_single_experiment(ACO_VRPB, problem_info)
     return final_solution
 
 

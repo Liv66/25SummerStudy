@@ -1,46 +1,4 @@
-import json
-import random
-import time
-
-from util_v1 import *
-from construction import *
-from method import *
-from solver import *
-from Solution import *
-
-
-def instance_generator(problem, N=50, capa=3000, line_p=0.7):
-    problem_info = {}
-    nodes_coord = [(12000, 16000)] + [(random.uniform(0, 24000), random.uniform(0, 32000)) for _ in range(N - 1)]
-    demands = [0]
-    for _ in range(N - 1):
-        demand = 0
-        while demand <= 0:
-            demand = int(random.gauss(500, 200))
-        demands.append(demand)
-
-    num_line = int(N * line_p)
-    node_type = [2 for _ in range(N)]
-    node_type[0] = 0
-    line_list = random.sample(range(1, N), num_line)
-    for i in line_list:
-        node_type[i] = 1
-
-    line_K = bin_packing([demands[i] for i in range(N) if node_type[i] == 1], capa)
-    back_K = bin_packing([demands[i] for i in range(N) if node_type[i] == 2], capa)
-    K = max(line_K, back_K)
-    dist_mat = get_distance(nodes_coord)
-
-    problem_info['N'] = N
-    problem_info['K'] = K
-    problem_info['capa'] = capa
-    problem_info['node_demands'] = demands
-    problem_info['node_types'] = node_type
-    problem_info['node_coords'] = nodes_coord
-    problem_info['dist_mat'] = dist_mat
-
-    with open(problem, "w", encoding='utf-8') as f:
-        json.dump(problem_info, f, ensure_ascii=False, indent=4)
+from JHJ.solver import *
 
 
 def jhj_main(problem_info):

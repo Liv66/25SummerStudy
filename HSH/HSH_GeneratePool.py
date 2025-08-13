@@ -3,9 +3,9 @@ import time
 import random
 from typing import List, Dict, Tuple
 
-from HSH_GRASP import generate_grasp_routes
-from HSH_TS import tabu_search
-from HSH_loader import load_instance_from_json
+from HSH.HSH_GRASP import generate_grasp_routes
+from HSH.HSH_TS import tabu_search
+from HSH.HSH_loader import load_instance_from_json
 
 class SolPool:
     """

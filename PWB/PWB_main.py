@@ -2,7 +2,7 @@ from PWB.PWB_vrpb import *
 from PWB.ILSRVND import *
 from PWB.KJH_vrpb import *
 from PWB.optimizer import *
-from PWB.KJH_main import *
+
 
 
 def PWB_run(problem_info, time_limit = 46):

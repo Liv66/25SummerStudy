@@ -1,5 +1,5 @@
 # cwj_dual_route_generator.py
-from cwj_pricing_problem import labeling_algorithm
+from cwj.cwj_pricing_problem import labeling_algorithm
 
 def generate_dual_routes(duals, route_pool, node_types, node_demands, dist_mat, Q):
     """

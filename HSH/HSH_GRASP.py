@@ -3,7 +3,7 @@ import random
 from typing import List, Dict
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
-from HSH_loader import load_instance_from_json
+from HSH.HSH_loader import load_instance_from_json
 import json
 
 def generate_grasp_routes(instance: Dict, alpha: float = 0.3, max_routes: int = None) -> List[List[int]]:

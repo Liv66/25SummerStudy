@@ -11,8 +11,6 @@ KNY_main_improved.py  —  기존 KNY_VRPB 파이프라인 + 성능 최적화 �
 ※ 내부 util · KNY_alns 구조(인터페이스)·check_feasible 는 기존과 같다고 가정.
 """
 
-import json
-import random
 import math
 import time
 from pathlib import Path
@@ -21,8 +19,7 @@ import csv  # <-- 추가
 import os   # <-- 추가
 import numpy as np # <-- 추가
 
-from util import get_distance, plot_vrpb, check_feasible
-from KNY_alns import alns_vrpb
+from KNY.KNY_alns import alns_vrpb
 
 # ▼▼▼ 여기에 스위치를 추가하세요 ▼▼▼
 ENABLE_LOGGING = False  # True로 바꾸면 다시 저장이 활성화됩니다.
@@ -576,13 +573,6 @@ def kny_run(problem_info):
         f"[✅] 총 실행 시간: {total_elapsed:.2f}초 (초기해: {init_elapsed:.2f}초 + ALNS: {alns_elapsed:.2f}초 + 후처리: {post_proc_elapsed:.2f}초)")
     print(f"──────────────────────────────────────────────────────────")
 
-    # 캐시를 사용한 최종 비용 계산
-    best_cost = sum(cache.get_route_cost(r) for r in best_routes)
-
-    # ── 최종 검증 (★ 핵심 수정 부분)
-    # check_feasible을 위해 node_types를 KJH 형식으로 변환
-    problem_info_copy = problem_info.copy()  # 원본 보존
-    problem_info_copy["node_types"] = to_kjh_types(node_types)  # ★ 이 줄 활성화!
     return to_kjh_routes(best_routes, depot_idx)
     # obj = check_feasible(problem_info_copy, to_kjh_routes(best_routes, depot_idx), 0, timelimit=60)
     # if obj:

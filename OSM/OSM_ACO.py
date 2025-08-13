@@ -1,6 +1,6 @@
 import random
 import numpy
-from OSM_util import get_distance, two_opt
+from OSM.OSM_util import get_distance, two_opt
 import time
 class ACO_VRPB:
     def __init__(self, alpha=1, beta=1.5, sigma=3, ro=0.8, th=80, iterations=200, ants=22, q0=0.9, stagnation_limit=3, perturbation_strength=1):
