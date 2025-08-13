@@ -1,7 +1,7 @@
 from gurobipy import Model, GRB, quicksum
 from typing import List, Dict
 from HSH_loader import load_instance_from_json
-from HSH_GeneratePool_NI_3 import run_pooling_loop
+from HSH_GeneratePool import run_pooling_loop
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
 import time, random
@@ -35,7 +35,7 @@ def plot_routes(instance: Dict, routes: List[List[int]]):
             elif types[i] == 2:
                 plt.scatter(x, y, color=colors(idx), marker='^', s=80)
 
-    # Unvisited node
+    # 미방문 노드
     unvisited_nodes = [i for i in range(num_nodes) if i != depot_index and i not in visited_nodes]
     for i in unvisited_nodes:
         x, y = coords[i]
@@ -62,14 +62,14 @@ def run_set_partitioning(instance: Dict, pool: List[List[int]]):
     model = Model("SetPartitioning")
     model.setParam("OutputFlag", 1)
 
-    # Route 변수 생성
+    # route 변수 생성
     route_vars = []
     for r_idx, route in enumerate(pool):
         var = model.addVar(vtype=GRB.BINARY, name=f"route_{r_idx}")
         route_vars.append(var)
     model.update()
 
-    # 고객 커버 제약: depot 제외한 노드만 검사
+    # depot 제외한 노드만 검사
     for c in customer_indices:
         model.addConstr(
             quicksum(route_vars[r_idx] for r_idx, route in enumerate(pool)
@@ -77,7 +77,7 @@ def run_set_partitioning(instance: Dict, pool: List[List[int]]):
             name=f"cover_customer_{c}"
         )
 
-    # [제약 2] 선택된 route 수는 차량 수 이하여야 함
+    # 선택된 route 수는 차량 수 이하여야 함
     model.addConstr(
         quicksum(route_vars) <= num_vehicles,
         name="vehicle_limit"
@@ -154,7 +154,7 @@ def validate_solution(instance: Dict, selected_routes: List[List[int]]):
         cond3_list.append(cond3)
     print(f"3. 모든 경로가 depot 시작/종료 + 1 포함 + 1-2-1 없음 → {all(cond3_list)}")
 
-    # 중복 방문 확인 (depot 제외)
+    # 중복 방문 확인(depot 제외)
     all_visited = []
     for route in selected_routes:
         all_visited.extend(route[1:-1])
@@ -206,12 +206,12 @@ def validate_solution(instance: Dict, selected_routes: List[List[int]]):
 
 if __name__ == '__main__':
     random.seed(42)
-    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_20_0.7.json")
+    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_150_0.5.json")
     instance["node_demands"] = [abs(d) for d in instance["node_demands"]]
 
     start_time = time.time()
 
-    pool = run_pooling_loop(instance, duration_seconds = 59)
+    pool = run_pooling_loop(instance, duration_seconds = 55)
 
     print(f"\n[총 수집된 고유 route 개수] {len(pool)}개")
 
