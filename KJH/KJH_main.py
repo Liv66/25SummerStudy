@@ -30,3 +30,4 @@ def KJH_run(problem_info, time_limit=60, log=False):
 
 if __name__ == "__main__":
     KJH_run()
+
