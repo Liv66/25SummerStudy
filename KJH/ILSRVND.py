@@ -23,17 +23,15 @@ class SolPool:
         self.node_type = node_type
         self.node_demand = node_demand
         self.random_cost = random_cost
-        for i in range(len(current_sol)):
-            route_hash = self.get_hash(current_sol[i].hist)
-            self.pool.append(route_hash)
-            self.cost_hash[route_hash] = current_sol[i].cost
-            self.sol_hash[route_hash] = current_sol[i].hist.copy()
 
-    def reset(self):
-        self.current_best_sol = copy.deepcopy(self.best_sol)
-        self.current_best_cost = self.best_cost
-        self.current_sol = copy.deepcopy(self.best_sol)
-        self.current_cost = self.best_cost
+        for i in range(len(current_sol)):
+            self.add_pool(current_sol[i].hist, current_sol[i].cost)
+
+    def reinitialize(self, sol, cost):
+        self.current_best_sol = copy.deepcopy(sol)
+        self.current_best_cost = cost
+        self.current_sol = copy.deepcopy(sol)
+        self.current_cost = cost
 
     def calculate_current_cost(self):
         self.current_cost = sum(route.cost for route in self.current_sol)
@@ -47,6 +45,7 @@ class SolPool:
             if cost < self.cost_hash[route_hash]:
                 self.cost_hash[route_hash] = cost
                 self.sol_hash[route_hash] = route.copy()
+
             return
         self.sol_hash[route_hash] = route.copy()
         self.pool.append(route_hash)
@@ -55,14 +54,14 @@ class SolPool:
     def make_sol(self, route, cost):
         line_load = 0
         back_load = 0
-        line_idx = 1  # back이 시작하는 부분
+        back_idx = 1  # back이 시작하는 부분
         for i in range(len(route)):
             if self.node_type[route[i]] == 1:
-                line_idx = i + 1
+                back_idx = i + 1
                 line_load += self.node_demand[route[i]]
             elif self.node_type[route[i]] == 2:
                 back_load += self.node_demand[route[i]]
-        return Route(route, cost, line_load, back_load, line_idx)
+        return Route(route, cost, line_load, back_load, back_idx)
 
 
 class ILS_RVND:
@@ -104,7 +103,7 @@ class ILS_RVND:
                     continue
 
                 # 빈 차량 또는 line이 1개이고 back이 여러 개인 경우 shift 안함
-                if current_sol[i].line_idx == 1 or (current_sol[i].line_idx == 2 and len(current_sol[i].hist) > 3):
+                if current_sol[i].back_idx == 1 or (current_sol[i].back_idx == 2 and len(current_sol[i].hist) > 3):
                     continue
 
                 give_route = current_sol[i]
@@ -113,13 +112,13 @@ class ILS_RVND:
                 i_to_j_pos = 0
 
                 # line to line
-                for x in range(1, give_route.line_idx):
+                for x in range(1, give_route.back_idx):
                     if spool.node_demand[give_route.hist[x]] + take_route.line_load > spool.capa:
                         continue
                     pre_x_cost = self.dist_mat[give_route.hist[x - 1]][give_route.hist[x]] + \
                                  self.dist_mat[give_route.hist[x]][give_route.hist[x + 1]]
                     after_x_cost = self.dist_mat[give_route.hist[x - 1]][give_route.hist[x + 1]]
-                    for y in range(1, take_route.line_idx):
+                    for y in range(1, take_route.back_idx):
                         # 개선 비용 = 개선 비용 - 추가 비용
                         after_y_cost = self.dist_mat[take_route.hist[y - 1]][give_route.hist[x]] + \
                                        self.dist_mat[give_route.hist[x]][take_route.hist[y]]
@@ -129,13 +128,13 @@ class ILS_RVND:
                             i_to_j_pos = (x, y)
 
                 # back to back
-                for x in range(give_route.line_idx, len(give_route.hist) - 1):
+                for x in range(give_route.back_idx, len(give_route.hist) - 1):
                     if spool.node_demand[give_route.hist[x]] + take_route.back_load > spool.capa:
                         continue
                     pre_x_cost = self.dist_mat[give_route.hist[x - 1]][give_route.hist[x]] + \
                                  self.dist_mat[give_route.hist[x]][give_route.hist[x + 1]]
                     after_x_cost = self.dist_mat[give_route.hist[x - 1]][give_route.hist[x + 1]]
-                    for y in range(take_route.line_idx, len(take_route.hist) - 1):
+                    for y in range(take_route.back_idx, len(take_route.hist) - 1):
                         # 개선 비용 = 개선 비용 - 추가 비용
                         after_y_cost = self.dist_mat[take_route.hist[y - 1]][give_route.hist[x]] + \
                                        self.dist_mat[give_route.hist[x]][take_route.hist[y]]
@@ -150,7 +149,7 @@ class ILS_RVND:
         if self.shift_status[i, j] > 0:
             improved = True
             x, y = self.shift_status_pos[(i, j)]
-            # line_idx 업데이트, load 업데이트, hash 검사
+            # back_idx 업데이트, load 업데이트, hash 검사
             give_hist = current_sol[i].hist
             v = give_hist.pop(x)
 
@@ -163,8 +162,6 @@ class ILS_RVND:
                 self.dist_mat[take_hist[i - 1]][take_hist[i]] for i in range(1, len(take_hist)))
             spool.current_sol[i] = spool.make_sol(give_hist, cost1)
             spool.current_sol[j] = spool.make_sol(take_hist, cost2)
-            # spool.add_pool(give_hist, cost1)
-            # spool.add_pool(take_hist, cost2)
 
             self.status_update(i, j)
 
@@ -183,12 +180,12 @@ class ILS_RVND:
                 swap2_route = current_sol[j]
                 i_to_j_best = 0
                 i_to_j_pos = 0
-                if swap1_route.line_idx > 1 and swap2_route.line_idx > 1:
+                if swap1_route.back_idx > 1 and swap2_route.back_idx > 1:
                     # line to line
-                    for x in range(1, swap1_route.line_idx):
+                    for x in range(1, swap1_route.back_idx):
                         pre_x_cost = self.dist_mat[swap1_route.hist[x - 1]][swap1_route.hist[x]] + \
                                      self.dist_mat[swap1_route.hist[x]][swap1_route.hist[x + 1]]
-                        for y in range(1, swap2_route.line_idx):
+                        for y in range(1, swap2_route.back_idx):
                             if swap2_route.line_load + spool.node_demand[swap1_route.hist[x]] - spool.node_demand[
                                 swap2_route.hist[y]] > spool.capa:
                                 continue
@@ -210,18 +207,18 @@ class ILS_RVND:
                                 i_to_j_best = delta
                                 i_to_j_pos = (x, y)
 
-                if len(swap1_route.hist) - swap1_route.line_idx > 2 and len(
-                        swap2_route.hist) - swap2_route.line_idx > 2:
+                if len(swap1_route.hist) - swap1_route.back_idx > 2 and len(
+                        swap2_route.hist) - swap2_route.back_idx > 2:
                     # back to back
-                    for x in range(swap1_route.line_idx, len(swap1_route.hist) - 1):
+                    for x in range(swap1_route.back_idx, len(swap1_route.hist) - 1):
                         pre_x_cost = self.dist_mat[swap1_route.hist[x - 1]][swap1_route.hist[x]] + \
                                      self.dist_mat[swap1_route.hist[x]][swap1_route.hist[x + 1]]
-                        for y in range(swap2_route.line_idx, len(swap2_route.hist) - 1):
-                            if swap2_route.back_load + spool.node_demand[swap1_route.hist[x]] - spool.node_demand[
-                                swap2_route.hist[y]] > spool.capa:
+                        for y in range(swap2_route.back_idx, len(swap2_route.hist) - 1):
+                            delta_load = spool.node_demand[swap1_route.hist[x]] - spool.node_demand[swap2_route.hist[y]]
+
+                            if swap2_route.back_load + delta_load > spool.capa:
                                 continue
-                            if swap1_route.back_load + spool.node_demand[swap2_route.hist[y]] - spool.node_demand[
-                                swap1_route.hist[x]] > spool.capa:
+                            if swap1_route.back_load - delta_load > spool.capa:
                                 continue
                             # 개선 비용 = 개선 비용 - 추가 비용
                             pre_y_cost = self.dist_mat[swap2_route.hist[y - 1]][swap2_route.hist[y]] + \
@@ -245,7 +242,7 @@ class ILS_RVND:
         if self.swap11_status[i, j] > 0:
             improved = True
             x, y = self.swap11_status_pos[(i, j)]
-            # line_idx 업데이트, load 업데이트, hash 검사
+            # back_idx 업데이트, load 업데이트, hash 검사
             swap1_hist = current_sol[i].hist
             swap2_hist = current_sol[j].hist
             swap1_hist[x], swap2_hist[y] = swap2_hist[y], swap1_hist[x]
@@ -255,9 +252,6 @@ class ILS_RVND:
                 self.dist_mat[swap2_hist[i - 1]][swap2_hist[i]] for i in range(1, len(swap2_hist)))
             spool.current_sol[i] = spool.make_sol(swap1_hist, cost1)
             spool.current_sol[j] = spool.make_sol(swap2_hist, cost2)
-            # spool.add_pool(swap1_hist, cost1)
-            # spool.add_pool(swap2_hist, cost2)
-
             self.status_update(i, j)
 
         return improved
@@ -275,20 +269,19 @@ class ILS_RVND:
                 i_to_j_best = 0
                 i_to_j_pos = 0
 
-                if swap1_route.line_idx > 2 and swap2_route.line_idx > 1:
+                if swap1_route.back_idx > 2 and swap2_route.back_idx > 1:
                     # line to line
-                    for x in range(1, swap1_route.line_idx - 1):
+                    for x in range(1, swap1_route.back_idx - 1):
                         pre_x_cost = self.dist_mat[swap1_route.hist[x - 1]][swap1_route.hist[x]] + \
                                      self.dist_mat[swap1_route.hist[x]][swap1_route.hist[x + 1]] + \
                                      self.dist_mat[swap1_route.hist[x + 1]][swap1_route.hist[x + 2]]
-                        for y in range(1, swap2_route.line_idx):
-                            if swap2_route.line_load + spool.node_demand[swap1_route.hist[x]] + spool.node_demand[
+                        for y in range(1, swap2_route.back_idx):
+                            delta_load = spool.node_demand[swap1_route.hist[x]] + spool.node_demand[
                                 swap1_route.hist[x + 1]] - spool.node_demand[
-                                swap2_route.hist[y]] > spool.capa:
+                                             swap2_route.hist[y]]
+                            if swap2_route.line_load + delta_load > spool.capa:
                                 continue
-                            if swap1_route.line_load + spool.node_demand[swap2_route.hist[y]] - spool.node_demand[
-                                swap1_route.hist[x]] - spool.node_demand[
-                                swap1_route.hist[x + 1]] > spool.capa:
+                            if swap1_route.line_load - delta_load > spool.capa:
                                 continue
 
                             pre_y_cost = self.dist_mat[swap2_route.hist[y - 1]][swap2_route.hist[y]] + \
@@ -307,20 +300,18 @@ class ILS_RVND:
                                 i_to_j_best = delta
                                 i_to_j_pos = (x, y)
 
-                if len(swap1_route.hist) - swap1_route.line_idx > 3 and len(
-                        swap2_route.hist) - swap2_route.line_idx > 2:
+                if len(swap1_route.hist) - swap1_route.back_idx > 3 and len(
+                        swap2_route.hist) - swap2_route.back_idx > 2:
                     # back to back
-                    for x in range(swap1_route.line_idx, len(swap1_route.hist) - 2):
+                    for x in range(swap1_route.back_idx, len(swap1_route.hist) - 2):
                         pre_x_cost = self.dist_mat[swap1_route.hist[x - 1]][swap1_route.hist[x]] + \
                                      self.dist_mat[swap1_route.hist[x]][swap1_route.hist[x + 1]]
-                        for y in range(swap2_route.line_idx, len(swap2_route.hist) - 1):
-                            if swap2_route.back_load + spool.node_demand[swap1_route.hist[x]] + spool.node_demand[
-                                swap1_route.hist[x + 1]] - spool.node_demand[
-                                swap2_route.hist[y]] > spool.capa:
+                        for y in range(swap2_route.back_idx, len(swap2_route.hist) - 1):
+                            delta_load = spool.node_demand[swap1_route.hist[x]] + spool.node_demand[
+                                swap1_route.hist[x + 1]] - spool.node_demand[swap2_route.hist[y]]
+                            if swap2_route.back_load + delta_load > spool.capa:
                                 continue
-                            if swap1_route.back_load + spool.node_demand[swap2_route.hist[y]] - spool.node_demand[
-                                swap1_route.hist[x]] - spool.node_demand[
-                                swap1_route.hist[x + 1]] > spool.capa:
+                            if swap1_route.back_load - delta_load > spool.capa:
                                 continue
 
                             pre_y_cost = self.dist_mat[swap2_route.hist[y - 1]][swap2_route.hist[y]] + \
@@ -345,7 +336,7 @@ class ILS_RVND:
         if self.swap21_status[i, j] > 0:
             improved = True
             x, y = self.swap21_status_pos[(i, j)]
-            # line_idx 업데이트, load 업데이트, hash 검사
+            # back_idx 업데이트, load 업데이트, hash 검사
             swap1_hist = current_sol[i].hist
             swap2_hist = current_sol[j].hist
             swap1_hist[x], swap2_hist[y] = swap2_hist[y], swap1_hist[x]
@@ -358,8 +349,6 @@ class ILS_RVND:
                 self.dist_mat[swap2_hist[i - 1]][swap2_hist[i]] for i in range(1, len(swap2_hist)))
             spool.current_sol[i] = spool.make_sol(swap1_hist, cost1)
             spool.current_sol[j] = spool.make_sol(swap2_hist, cost2)
-            # spool.add_pool(swap1_hist, cost1)
-            # spool.add_pool(swap2_hist, cost2)
 
             self.status_update(i, j)
         return improved
@@ -378,12 +367,12 @@ class ILS_RVND:
                 i_to_j_pos = 0
 
                 # line to line
-                if swap1_route.line_idx > 2 and swap2_route.line_idx > 2:
-                    for x in range(1, swap1_route.line_idx - 1):
+                if swap1_route.back_idx > 2 and swap2_route.back_idx > 2:
+                    for x in range(1, swap1_route.back_idx - 1):
                         pre_x_cost = self.dist_mat[swap1_route.hist[x - 1]][swap1_route.hist[x]] + \
                                      self.dist_mat[swap1_route.hist[x]][swap1_route.hist[x + 1]] + \
                                      self.dist_mat[swap1_route.hist[x + 1]][swap1_route.hist[x + 2]]
-                        for y in range(1, swap2_route.line_idx - 1):
+                        for y in range(1, swap2_route.back_idx - 1):
                             delta_load = spool.node_demand[swap1_route.hist[x]] + spool.node_demand[
                                 swap1_route.hist[x + 1]] - spool.node_demand[swap2_route.hist[y]] - spool.node_demand[
                                              swap2_route.hist[y + 1]]
@@ -410,13 +399,13 @@ class ILS_RVND:
                                 i_to_j_best = delta
                                 i_to_j_pos = (x, y)
 
-                if len(swap1_route.hist) - swap1_route.line_idx > 3 and len(
-                        swap2_route.hist) - swap2_route.line_idx > 3:
+                if len(swap1_route.hist) - swap1_route.back_idx > 3 and len(
+                        swap2_route.hist) - swap2_route.back_idx > 3:
                     # back to back
-                    for x in range(swap1_route.line_idx, len(swap1_route.hist) - 2):
+                    for x in range(swap1_route.back_idx, len(swap1_route.hist) - 2):
                         pre_x_cost = self.dist_mat[swap1_route.hist[x - 1]][swap1_route.hist[x]] + \
                                      self.dist_mat[swap1_route.hist[x]][swap1_route.hist[x + 1]]
-                        for y in range(swap2_route.line_idx, len(swap2_route.hist) - 2):
+                        for y in range(swap2_route.back_idx, len(swap2_route.hist) - 2):
                             delta_load = spool.node_demand[swap1_route.hist[x]] + spool.node_demand[
                                 swap1_route.hist[x + 1]] - spool.node_demand[swap2_route.hist[y]] - spool.node_demand[
                                              swap2_route.hist[y + 1]]
@@ -449,7 +438,7 @@ class ILS_RVND:
         if self.swap22_status[i, j] > 0:
             improved = True
             x, y = self.swap22_status_pos[(i, j)]
-            # line_idx 업데이트, load 업데이트, hash 검사
+            # back_idx 업데이트, load 업데이트, hash 검사
             swap1_hist = current_sol[i].hist
             swap2_hist = current_sol[j].hist
             swap1_hist[x], swap2_hist[y] = swap2_hist[y], swap1_hist[x]
@@ -460,8 +449,6 @@ class ILS_RVND:
                 self.dist_mat[swap2_hist[i - 1]][swap2_hist[i]] for i in range(1, len(swap2_hist)))
             spool.current_sol[i] = spool.make_sol(swap1_hist, cost1)
             spool.current_sol[j] = spool.make_sol(swap2_hist, cost2)
-            # spool.add_pool(swap1_hist, cost1)
-            # spool.add_pool(swap2_hist, cost2)
             self.status_update(i, j)
 
         return improved
@@ -471,8 +458,8 @@ class ILS_RVND:
         improved = True
         while improved:
             improved = False
-            for i in range(1, route.line_idx - 1):
-                for j in range(i + 1, route.line_idx):
+            for i in range(1, route.back_idx - 1):
+                for j in range(i + 1, route.back_idx):
                     # before : 기존 경로 / after : 변경된 부분
                     before = (self.dist_mat[route.hist[i - 1]][route.hist[i]] + self.dist_mat[route.hist[j]][
                         route.hist[j + 1]])
@@ -484,7 +471,7 @@ class ILS_RVND:
                         improved = True
                         result = True
 
-            for i in range(route.line_idx, len(route.hist) - 2):
+            for i in range(route.back_idx, len(route.hist) - 2):
                 for j in range(i + 1, len(route.hist) - 1):
                     before = (self.dist_mat[route.hist[i - 1]][route.hist[i]] + self.dist_mat[route.hist[j]][
                         route.hist[j + 1]])
@@ -502,10 +489,10 @@ class ILS_RVND:
         improved = False
         while improved:
             improved = False
-            for i in range(1, route.line_idx):
+            for i in range(1, route.back_idx):
                 save_cost = self.dist_mat[route.hist[i - 1]][route.hist[i]] + self.dist_mat[route.hist[i]][
                     route.hist[i + 1]] - self.dist_mat[route.hist[i - 1]][route.hist[i + 1]]
-                for j in range(i, route.line_idx):
+                for j in range(i, route.back_idx):
                     if i == j: continue
                     increase_cost = self.dist_mat[route.hist[j]][route.hist[i]] + self.dist_mat[route.hist[i]][
                         route.hist[j + 1]]
@@ -519,10 +506,10 @@ class ILS_RVND:
                         improved = True
                         result = True
 
-            for i in range(route.line_idx, len(route.hist) - 1):
+            for i in range(route.back_idx, len(route.hist) - 1):
                 save_cost = self.dist_mat[route.hist[i - 1]][route.hist[i]] + self.dist_mat[route.hist[i]][
                     route.hist[i + 1]] - self.dist_mat[route.hist[i - 1]][route.hist[i + 1]]
-                for j in range(route.line_idx, len(route.hist) - 1):
+                for j in range(route.back_idx, len(route.hist) - 1):
                     if i == j: continue
                     increase_cost = self.dist_mat[route.hist[j]][route.hist[i]] + self.dist_mat[route.hist[i]][
                         route.hist[j + 1]]
@@ -542,8 +529,8 @@ class ILS_RVND:
         improved = True
         while improved:
             improved = False
-            for i in range(1, route.line_idx - 1):
-                for j in range(i + 1, route.line_idx):
+            for i in range(1, route.back_idx - 1):
+                for j in range(i + 1, route.back_idx):
                     # before : 기존 경로 / after : 변경된 부분
                     if j - i > 1:
                         before = (self.dist_mat[route.hist[i - 1]][route.hist[i]] + self.dist_mat[route.hist[i]][
@@ -565,7 +552,7 @@ class ILS_RVND:
                         improved = True
                         result = True
 
-            for i in range(route.line_idx, len(route.hist) - 2):
+            for i in range(route.back_idx, len(route.hist) - 2):
                 for j in range(i + 1, len(route.hist) - 1):
                     if j - i > 1:
                         before = (self.dist_mat[route.hist[i - 1]][route.hist[i]] + self.dist_mat[route.hist[i]][
@@ -622,9 +609,9 @@ class ILS_RVND:
             while outer_flag:
                 a, b = random.sample(range(len_sol), 2)
                 swap1_route, swap2_route = spool.current_sol[a], spool.current_sol[b]
-                for x in range(1, swap1_route.line_idx):
+                for x in range(1, swap1_route.back_idx):
                     inner_flag = True
-                    for y in range(1, swap2_route.line_idx):
+                    for y in range(1, swap2_route.back_idx):
                         if swap2_route.line_load + spool.node_demand[swap1_route.hist[x]] - spool.node_demand[
                             swap2_route.hist[y]] > spool.capa:
                             continue
@@ -652,23 +639,25 @@ class ILS_RVND:
                         break
         spool.calculate_current_cost()
 
-    def run(self, N, spool, solv_SC, start, time_limit=60, Maxiter=2000, log=False):
+    def run(self, N, spool, grb_solver, start, time_limit=60, Maxiter=2000, log=False):
         end_flag = False
         pert_min, pert_max = int(N * 0.1), int(N * 0.2)
         ub_min, up_max = int(N * 0.2), int(N * 0.3)
         no_improve = 0
         pert_iter = 0
+        last_sc = 5 if N < 100 else 7
+
         for i in range(Maxiter):
-            MaxIterILS = 40
+            MaxIterILS = 50
             iterILS = 0
             if log:
                 print("LOG", spool.best_cost, spool.current_best_cost, spool.current_cost, no_improve, pert_min,
                       pert_max)
             while iterILS < MaxIterILS:
-                self.run_rvnd(spool)
-                if time.time() - start > time_limit - 5:
+                if last_sc > time_limit - (time.time() - start):
                     end_flag = True
                     break
+                self.run_rvnd(spool)
 
                 # pull update 지점
                 for route in spool.current_sol:
@@ -701,31 +690,28 @@ class ILS_RVND:
                     pert_iter = 0
 
             if end_flag:
-                opt_result, obj = solv_SC(spool, self.dist_mat, N, self.K, log=log)
-                spool.best_cost = obj
-                # print(opt_result)
-                spool.best_sol = [spool.make_sol(route, spool.cost_hash[spool.get_hash(route)]) for route in opt_result]
+                opt_result, obj = grb_solver.solv_SP(spool, N, self.K, tl=time_limit - (time.time() - start), log=log)
+                if obj < spool.best_cost:
+                    spool.best_cost = obj
+                    spool.best_sol = [spool.make_sol(route, spool.cost_hash[spool.get_hash(route)]) for route in
+                                      opt_result]
                 return
 
-            if not i % 5:
-                opt_result, obj = solv_SC(spool, self.dist_mat, N, self.K, log=log)
+            if not i % 4:
+                opt_result, obj = grb_solver.solv_SC(spool, self.dist_mat, N, self.K, log=log)
                 if obj < spool.best_cost:
                     no_improve = 0
                     spool.best_cost = obj
-                    # print(opt_result)
                     spool.best_sol = [spool.make_sol(route, spool.cost_hash[spool.get_hash(route)]) for route in
                                       opt_result]
-                    spool.reset()
-
-            if no_improve > 10:
+                    spool.reinitialize(spool.best_sol, spool.best_cost)
+            else:
+                pert_min, pert_max = int(N * 0.1), int(N * 0.2)
+                ub_min, up_max = int(N * 0.2), int(N * 0.3)
                 no_improve = 0
-                reset_sol = self.construct()
-
-                total_cost = sum(route.cost for route in reset_sol)
-                spool.current_best_sol = copy.deepcopy(reset_sol)
-                spool.current_best_cost = total_cost
-                spool.current_sol = reset_sol
-                spool.current_cost = total_cost
-
-                for i in range(len(reset_sol)):
-                    spool.add_pool(reset_sol[i].hist, reset_sol[i].cost)
+                pert_iter = 0
+                initial_sol = self.construct()
+                total_cost = sum(route.cost for route in initial_sol)
+                spool.reinitialize(initial_sol, total_cost)
+                for i in range(len(initial_sol)):
+                    spool.add_pool(initial_sol[i].hist, initial_sol[i].cost)
