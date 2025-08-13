@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 class FirstImprovementStrategy:
 
     # 첫 번째 개선을 찾는 즉시 적용하고 종료
-
+  
     def minimize(self, solution: CVRPBSolution, start_time, time_limit):
 
         # 시간 제한 체크
@@ -30,37 +30,29 @@ class FirstImprovementStrategy:
         return False
     
     def _try_relocate(self, solution: CVRPBSolution, start_time, time_limit):
-
         routes = solution.get_routes()
         
-        # 각 경로의 각 고객에 대해
         for from_route_idx, from_route in enumerate(routes):
             if time.time() - start_time >= time_limit:
                 return False
                 
-            customers = from_route.get_customers()
-            # customer 비어있으면 다음 경로로
-            if not customers:
-                    continue
-            # route
-            for from_pos in range(1, from_route.size()):  # depot 제외
-                customer = from_route.get(from_pos)
-                
-                # 모든 경로의 모든 위치에 삽입 시도
+            if not from_route.get_customers():
+                continue
+
+            # from_pos는 1부터 (고객 수)까지 순회
+            for from_pos in range(1, from_route.size() - 1):
+                # to_pos는 1부터 (고객 수 + 1)까지 순회 (맨 뒤에 삽입 가능)
                 for to_route_idx, to_route in enumerate(routes):
-                    for to_pos in range(1, to_route.size() + 1):  # 마지막 위치도 포함
-                        if from_route_idx == to_route_idx and abs(from_pos - to_pos) <= 1:
-                            continue  # 같은 위치거나 인접 위치는 스킵
+                    for to_pos in range(1, to_route.size()):
+                        if from_route_idx == to_route_idx and (to_pos == from_pos or to_pos == from_pos + 1):
+                            continue
                         
-                        # Delta evaluation으로 빠른 비용 계산
                         if self._is_relocate_improving(solution, from_route_idx, from_pos, to_route_idx, to_pos):
-                            # 실제 move 생성 및 적용
                             self._apply_relocate(solution, from_route_idx, from_pos, to_route_idx, to_pos)
                             return True
         return False
     
     def _try_exchange(self, solution: CVRPBSolution, start_time, time_limit):
-
         routes = solution.get_routes()
         
         for r1_idx, route1 in enumerate(routes):
@@ -70,16 +62,16 @@ class FirstImprovementStrategy:
             if not route1.get_customers():
                 continue
                 
-            for pos1 in range(1, route1.size()):
+            for pos1 in range(1, route1.size() - 1):
                 for r2_idx, route2 in enumerate(routes):
-                    if r2_idx < r1_idx:  # 중복 방지
+                    if r2_idx < r1_idx:
                         continue
                         
                     if not route2.get_customers():
                         continue
 
                     start_pos2 = pos1 + 1 if r1_idx == r2_idx else 1
-                    for pos2 in range(start_pos2, route2.size()):
+                    for pos2 in range(start_pos2, route2.size() - 1):
                         
                         if self._is_exchange_improving(solution, r1_idx, pos1, r2_idx, pos2):
                             self._apply_exchange(solution, r1_idx, pos1, r2_idx, pos2)
@@ -105,7 +97,7 @@ class FirstImprovementStrategy:
                         return True
         return False
     
-    def _is_relocate_improving(self, solution, from_route_idx, from_pos, to_route_idx, to_pos) -> bool:
+    def _is_relocate_improving(self, solution, from_route_idx, from_pos, to_route_idx, to_pos):
 
         routes = solution.get_routes()
         from_route = routes[from_route_idx]
@@ -368,7 +360,7 @@ class FirstImprovementStrategy:
             route1.add_customer(customer2, pos1)
             route2.add_customer(customer1, pos2)
         
-        # Delta evaluation으로 비용 업데이트
+        # 비용 업데이트
         total_gain = penalty_gain + distance_gain
         solution.update_cost_with_gain(total_gain)
     
@@ -391,5 +383,5 @@ class FirstImprovementStrategy:
         new_customers = customers[:i+1] + customers[i+1:j+1][::-1] + customers[j+1:]
         route.set_customers(new_customers, problem_info)
         
-        # Delta evaluation으로 비용 업데이트 (페널티 변화 없음)
+        #  비용 업데이트 (페널티 변화 없음)
         solution.update_cost_with_gain(distance_gain)

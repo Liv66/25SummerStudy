@@ -24,7 +24,6 @@ class Route:
             self._add_backhaul(node, index)
             
     def force_add_customer(self, node):
-        """용량 제약, 순서 제약을 무시하고 고객을 가장 적절한 타입의 마지막에 추가"""
         if self.problem_info['node_types'][node] == 1:
             pos = len(self.linehaul_customers)
             self.linehaul_customers.insert(pos, node)
@@ -75,7 +74,6 @@ class Route:
             self.pickup_load -= self.problem_info['node_demands'][node]
             
     def remove_customer_by_id(self, customer_id):
-        """고객 ID를 받아 경로에서 제거합니다."""
         try:
             self.linehaul_customers.remove(customer_id)
             self.delivery_load -= self.problem_info['node_demands'][customer_id]
@@ -90,7 +88,6 @@ class Route:
             raise ValueError(f"Customer {customer_id} not found in this route.")
 
     def set_customers(self, customers: list, problem_info: dict):
-        """경로의 고객 리스트를 통째로 교체하고 부하량을 재계산합니다."""
         self.linehaul_customers = []
         self.backhaul_customers = []
         self.delivery_load = 0
@@ -106,9 +103,6 @@ class Route:
             else:
                 self.backhaul_customers.append(customer)
                 self.pickup_load += node_demands[customer]
-
-
-
 
     def get_distance_cost(self):
         dist = self.problem_info['dist_mat']
@@ -178,11 +172,6 @@ class Route:
         return len(self.backhaul_customers)
     def size(self):
         return len(self.linehaul_customers) + len(self.backhaul_customers) + 2
-
-
-    def __eq__(self, other):
-        if not isinstance(other, Route): return False
-        return self.linehaul_customers == other.linehaul_customers and self.backhaul_customers == other.backhaul_customers
 
     def __iter__(self):
         yield 0

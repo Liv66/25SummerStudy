@@ -8,25 +8,23 @@ class GreedyConstructionStrategy:
         prev_node = route.get(index - 1)
         next_node = route.get(index)
 
-        # 1. 거리 비용 변화량 계산
+        # 1. 거리 비용
         # => 변화한 노드에서 발생한 거리 비용 ( prev, next는 고정 )
         dist_cost_change = (dist_mat[prev_node][customer] + 
                             dist_mat[customer][next_node] - 
                             dist_mat[prev_node][next_node])
 
-        # 2. 페널티 비용 변화량 계산
+        # 2. 페널티 비용
         demands = problem_info['node_demands']
         types = problem_info['node_types']
         capacity = route.get_capacity()
         customer_demand = demands[customer]
         
-        # 생성 단계에서는 Local Search와 다른 페널티율을 사용할 수 있음
-        construction_penalty_rate = 100
+        construction_penalty_rate = 10000
 
         # 이전 패널티
         penalty_before = route.get_penalty_cost(construction_penalty_rate)
 
-        # 고객을 삽입했을 경우의 새로운 부하량 (가상)
         #
         if types[customer] == 1: # linehaul
             delivery_load_after = route.get_delivery_load() + customer_demand
@@ -53,8 +51,6 @@ class GreedyConstructionStrategy:
             best_insertion = None
             min_cost = float('inf')
 
-            # 이번에는 '다음으로 삽입할 고객'을 미리 정하지 않고,
-            # 섞인 리스트의 첫 번째 고객을 대상으로 최적의 위치를 찾습니다.
             customer_to_insert = unassigned_customers[0]
             is_linehaul = problem_info['node_types'][customer_to_insert] == 1
             

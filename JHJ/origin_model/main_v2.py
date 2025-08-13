@@ -44,7 +44,7 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
 
 def main():
-    N = 100
+    N = 50
     line_p = 0.7
     capa = 2000
     problem = f"instances/problem_{N}_{line_p}.json"

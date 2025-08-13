@@ -6,7 +6,7 @@ import random
 import copy
 
 class IteratedLocalSearchSolver:
-    """ILS"""
+
     def __init__(self, construction_strategy: GreedyConstructionStrategy, local_search_strategy: FirstImprovementStrategy):
         self.construction_strategy = construction_strategy
         self.local_search_strategy = local_search_strategy
@@ -15,9 +15,9 @@ class IteratedLocalSearchSolver:
         # 1. 초기해 생성
         current_solution = CVRPBSolution(self.construction_strategy.build_solution(instance))
 
-        # 2. 초기 Local Search (LS Loop) - 제한된 횟수만큼만 수행
+        # 2. 초기 Local Search
         initial_ls_improvement_count = 0
-        initial_ls_improvement_limit = 200 # 초기 LS 최대 개선 횟수 제한
+        initial_ls_improvement_limit = 200
 
         while time.time() - start_time < time_limit:
             if initial_ls_improvement_count >= initial_ls_improvement_limit:
@@ -34,9 +34,9 @@ class IteratedLocalSearchSolver:
 
         iteration = 0
         iterations_without_improvement = 0
-        max_iters_without_improvement = 40
+        max_iters_without_improvement = 10000
 
-        # 3. ILS 메인 루프 (ILS Loop)
+        # 3. ILS 메인
         while time.time() - start_time < time_limit:
             if iterations_without_improvement >= max_iters_without_improvement:
                 print(f"Stopping ILS after {max_iters_without_improvement} iterations without improvement.")
@@ -50,24 +50,24 @@ class IteratedLocalSearchSolver:
             print(f"--- ILS Iteration {iteration}, Best Cost: {best_cost:.2f} (Feasible: {is_best_feasible}), Time: {elapsed_time:.1f}s/{time_limit}s ---")
 
             # 4. 교란 (Perturbation)
-            strength = 0.3 + (iteration * 0.01)
+            strength = 0.3 + (iteration * 0.01) if iteration <= 50 else 0.7
             perturbed_solution = self._perturb(best_solution, instance, strength)
 
-            # 5. 교란된 해에 대한 Local Search (LS Loop)
+            # 5. 교란된 해에 대한 Local Search
             ls_improvements = 0
-            max_ls_improvements = 200  # ILS 내 Local Search 개선 횟수 제한
+            max_ls_improvements = 250  # ILS 내 Local Search 개선 횟수 제한
             while time.time() - start_time < time_limit and ls_improvements < max_ls_improvements:
                 was_improved = self.local_search_strategy.minimize(perturbed_solution, start_time, time_limit)
                 if not was_improved:
                     break
                 ls_improvements += 1
-
+                #
             if ls_improvements >= max_ls_improvements:
                 print(f"    LS reached improvement limit: {ls_improvements}")
             else:
                 print(f"    LS improvements: {ls_improvements}")
 
-            # 6. 수용 기준 (Acceptance Criterion)
+            # 6. 수용
             new_cost = perturbed_solution.get_total_cost()
             is_new_feasible = perturbed_solution.get_penalty_cost(perturbed_solution.penalty_rate) < 1e-9
 
