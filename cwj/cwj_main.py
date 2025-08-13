@@ -1,6 +1,8 @@
 # cwj_main.py
 import json
 import time
+import pandas as pd  # ← 추가
+from datetime import datetime  # ← 추가
 from cwj_master_problem import solve_master_problem
 from cwj_initial_patterns import generate_initial_patterns
 from cwj_dual_route_generator import generate_dual_routes
@@ -47,7 +49,7 @@ def VRPB_CG_Heuristic(problem_info):
         print(f"[DEBUG] Initial route pool size: {len(route_pool)}")
         best_solution, duals, missed_customers = solve_master_problem(route_pool, node_types, dist_mat, K, relax=True)
         best_solution = improve_solution(best_solution, route_pool, node_types, node_demands, dist_mat, Q)
-    
+        
     print("Phase 2 Solution")
     total_cost = 0
     for idx, (route, cost) in enumerate(best_solution):
@@ -85,7 +87,57 @@ def cwj_main(problem_info):
         print(f"Route: {route} | Cost: {int(cost)}")
         total_cost += cost
     print(f"Total Cost: {int(total_cost)}")
+    
+    # ★ 엑셀 저장 추가
+    out_path = f"vrpb_result.xlsx"
+    save_solution_to_excel(out_path, solution, node_type, K, capa, dist_mat)
+    print(f"\n[INFO] 결과를 엑셀로 저장했습니다: {out_path}")
 
+def save_solution_to_excel(filepath, solution, node_types, K, Q, dist_mat):
+    """
+    solution: List[(route, cost)]
+    node_types: 0(depot), 1(linehaul), 2(backhaul)
+    """
+    # 시트 1: Route 상세
+    rows = []
+    used_vehicles = len(solution)
+    total_cost = 0
+    for ridx, (route, cost) in enumerate(solution, start=1):
+        route_nodes = route[1:-1]
+        lh = [n for n in route_nodes if node_types[n] == 1]
+        bh = [n for n in route_nodes if node_types[n] == 2]
+        rows.append({
+            "RouteID": ridx,
+            "Route": str(route),
+            "Cost": int(cost),
+            "NumCustomers": len(route_nodes),
+            "NumLinehauls": len(lh),
+            "NumBackhauls": len(bh),
+        })
+        total_cost += cost
+
+    df_routes = pd.DataFrame(rows)
+
+    # 시트 2: Summary
+    required_customers = {i for i, t in enumerate(node_types) if i != 0 and t in (1, 2)}
+    covered = set()
+    for route, _ in solution:
+        covered.update(route[1:-1])
+    missed = sorted(required_customers - covered)
+
+    summary_rows = [{
+        "UsedVehicles": used_vehicles,
+        "VehicleLimit(K)": K,
+        "VehicleCapacity(Q)": Q,
+        "TotalCost": int(total_cost),
+        "NumCustomers": len(required_customers),
+        "Uncovered": ",".join(map(str, missed)) if missed else "",
+    }]
+    df_summary = pd.DataFrame(summary_rows)
+
+    with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+        df_routes.to_excel(writer, index=False, sheet_name="Routes")
+        df_summary.to_excel(writer, index=False, sheet_name="Summary")
 
 if __name__ == '__main__':
     with open('/Users/michael/Desktop/RiskLAB./Study/25SummerStudy/instances/problem_20_0.7.json', 'r') as f:
