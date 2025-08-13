@@ -25,7 +25,7 @@ from util import get_distance, plot_vrpb, check_feasible
 from KNY_alns import alns_vrpb
 
 # ▼▼▼ 여기에 스위치를 추가하세요 ▼▼▼
-ENABLE_LOGGING = True  # True로 바꾸면 다시 저장이 활성화됩니다.
+ENABLE_LOGGING = False  # True로 바꾸면 다시 저장이 활성화됩니다.
 
 #random.seed(42)
 
@@ -559,7 +559,7 @@ def run_kjh_problem(problem_path: Path):
     alns_start = time.time()
     best_routes, _ = alns_vrpb(
         init_routes, dist, node_types, demands, capa, depot_idx,
-        max_vehicles=K, time_limit=58
+        max_vehicles=K, time_limit=57
     )
     alns_elapsed = time.time() - alns_start
     print(f"[⏱️] ALNS 실행 시간: {alns_elapsed:.2f}초")
@@ -633,16 +633,16 @@ def run_kjh_problem(problem_path: Path):
     log_data = {
         'instance': problem_path.stem,  # 파일명 (e.g., 'problem_150_0.7')
         'obj': final_stats['obj'],
-        'mean_dist': final_stats['mean_dist'],
-        'std_dist': final_stats['std_dist'],
-        'max_dist': final_stats['max_dist'],
-        'min_dist': final_stats['min_dist'],
-        'std_line_load': final_stats['std_load'],
-        'max_line_load': final_stats['max_load'],
-        'min_line_load': final_stats['min_load'],
-        'std_back_load': final_stats['std_back_load'],
-        'max_back_load': final_stats['max_back_load'],
-        'min_back_load': final_stats['min_back_load'],
+        'mean_dist': round(final_stats['mean_dist'], 2),
+        'std_dist': round(final_stats['std_dist'], 2),
+        'max_dist': round(final_stats['max_dist'], 2),
+        'min_dist': round(final_stats['min_dist'], 2),
+        'std_line_load': round(final_stats['std_load'], 2),
+        'max_line_load': round(final_stats['max_load'], 2),
+        'min_line_load': round(final_stats['min_load'], 2),
+        'std_back_load': round(final_stats['std_back_load'], 2),
+        'max_back_load': round(final_stats['max_back_load'], 2),
+        'min_back_load': round(final_stats['min_back_load'], 2),
         'num_vehicle': final_stats['num_vehicles'],
         'alns_time': round(alns_elapsed, 2),      # ALNS 실행 시간
         'total_time': round(total_elapsed, 2),    # 초기해+ALNS+후처리 전체 시간
@@ -667,8 +667,8 @@ if __name__ == "__main__":
     ROOT = Path(__file__).resolve().parents[1]
 
     # 여러 번 실행 예시 (예: 5회)
-    instance_path = ROOT / "instances" / "problem_50_0.5.json"
-    num_runs = 3
+    instance_path = ROOT / "instances" / "problem_130_0.5.json"
+    num_runs = 2
     print(f"'{instance_path.name}' 인스턴스를 {num_runs}회 실행합니다.")
 
     for i in range(num_runs):
