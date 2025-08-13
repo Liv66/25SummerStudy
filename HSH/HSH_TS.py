@@ -1,4 +1,4 @@
-# HSH_TS
+# HSH_TS: Tabu Search
 from typing import List, Dict, Tuple
 import matplotlib.pyplot as plt
 from matplotlib import colormaps

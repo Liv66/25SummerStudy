@@ -1,4 +1,4 @@
-# HSH_GeneratePool
+# HSH_GeneratePool: Pool 생성, 관리
 import time
 import random
 from typing import List, Dict, Tuple

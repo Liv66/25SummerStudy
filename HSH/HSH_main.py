@@ -1,4 +1,4 @@
-# HSH_main
+# HSH_main: main
 from HSH_GeneratePool import run_pooling_loop
 from HSH_SP import run_set_partitioning, validate_solution
 from HSH_loader import load_instance_from_json
@@ -16,7 +16,7 @@ def HSH_main(problem_info):
 
 if __name__ == "__main__":
     random.seed(42)
-    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_150_0.7.json")
+    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_130_0.85.json")
     instance["node_demands"] = [abs(d) for d in instance["node_demands"]]
     start_time = time.time()
     HSH_main(instance)

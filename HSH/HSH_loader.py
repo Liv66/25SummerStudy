@@ -1,4 +1,4 @@
-# HSH_loader
+# HSH_loader: instance loader
 import json
 from typing import Dict
 

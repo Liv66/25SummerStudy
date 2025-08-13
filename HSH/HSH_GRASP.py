@@ -1,4 +1,4 @@
-# HSH_GRASP
+# HSH_GRASP: GRASP
 import random
 from typing import List, Dict
 import matplotlib.pyplot as plt

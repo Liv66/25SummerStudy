@@ -1,4 +1,4 @@
-# HSH_SP
+# HSH_SP: Set Partitioning
 from gurobipy import Model, GRB, quicksum
 from typing import List, Dict
 from HSH_loader import load_instance_from_json
