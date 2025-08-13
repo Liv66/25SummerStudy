@@ -1,5 +1,6 @@
 import random
-
+import time
+random.seed(42)
 
 class Route:
     def __init__(self, hist=None, cost=0, line_load=0, back_load=0, back_idx=1):
