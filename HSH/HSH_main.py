@@ -1,11 +1,12 @@
-from HSH_GeneratePool_NI_3 import run_pooling_loop
+# HSH_main
+from HSH_GeneratePool import run_pooling_loop
 from HSH_SP import run_set_partitioning, validate_solution
 from HSH_loader import load_instance_from_json
 import random, time
 
 def HSH_main(problem_info):
 
-    pool = run_pooling_loop(problem_info, duration_seconds = 59)
+    pool = run_pooling_loop(problem_info, duration_seconds = 50)
     print(f"\n[총 수집된 고유 route 개수] {len(pool)}개")
     selected_routes = run_set_partitioning(problem_info, pool)
     end_time = time.time()
@@ -15,7 +16,7 @@ def HSH_main(problem_info):
 
 if __name__ == "__main__":
     random.seed(42)
-    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_20_0.7.json")
+    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_150_0.7.json")
     instance["node_demands"] = [abs(d) for d in instance["node_demands"]]
     start_time = time.time()
     HSH_main(instance)

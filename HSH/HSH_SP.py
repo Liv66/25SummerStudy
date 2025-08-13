@@ -1,7 +1,8 @@
+# HSH_SP
 from gurobipy import Model, GRB, quicksum
 from typing import List, Dict
 from HSH_loader import load_instance_from_json
-from HSH_GeneratePool_NI_3 import run_pooling_loop
+from HSH_GeneratePool import run_pooling_loop
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
 import time, random
@@ -206,12 +207,12 @@ def validate_solution(instance: Dict, selected_routes: List[List[int]]):
 
 if __name__ == '__main__':
     random.seed(42)
-    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_20_0.7.json")
+    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_150_0.5.json")
     instance["node_demands"] = [abs(d) for d in instance["node_demands"]]
 
     start_time = time.time()
 
-    pool = run_pooling_loop(instance, duration_seconds = 59)
+    pool = run_pooling_loop(instance, duration_seconds = 55)
 
     print(f"\n[총 수집된 고유 route 개수] {len(pool)}개")
 
