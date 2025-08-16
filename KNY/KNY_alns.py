@@ -1,4 +1,4 @@
-# === 개선된 ALNS with 교차 해결 및 클러스터링 강화 ===
+# === 개선된 ALNS with 교차 해결 및 클러스터링 강화 (로그 제어 버전) ===
 import random
 import math
 import time
@@ -49,14 +49,15 @@ def fast_feasible_check_alns(
 
     return True
 
+
 def is_route_feasible(route, node_types, demands, capa, depot_idx):
     return fast_feasible_check_alns(route, node_types, demands, capa, depot_idx)
 
 
-def solution_feasible(routes, node_types, demands, capa, depot_idx):
+def solution_feasible(routes, node_types, demands, capa, depot_idx, verbose=False):
     """
     각 라우트의 실행 가능 여부 + 전체 노드 방문 여부 + 적재량 오류 여부를 함께 검사
-    실패한 경우 원인을 로그로 출력
+    실패한 경우 원인을 로그로 출력 (verbose=True일 때만)
     """
     all_nodes = set(i for i in range(len(node_types)) if i != depot_idx)
     visited = set(n for r in routes for n in r if n != depot_idx)
@@ -64,13 +65,15 @@ def solution_feasible(routes, node_types, demands, capa, depot_idx):
     # ── ① 전체 노드 방문 여부 검사 ─────────────────────
     missed = all_nodes - visited
     if missed:
-        print(f"[❌ solution_feasible] 방문하지 않은 노드: {sorted(missed)}")
+        if verbose:
+            print(f"[❌ solution_feasible] 방문하지 않은 노드: {sorted(missed)}")
         return False
 
     # ── ② 각 라우트의 제약조건 검사 ─────────────────────
     for r_idx, route in enumerate(routes):
         if not fast_feasible_check_alns(route, node_types, demands, capa, depot_idx):
-            print(f"[❌ solution_feasible] route {r_idx}가 fast_feasible_check_alns() 통과 실패: {route}")
+            if verbose:
+                print(f"[❌ solution_feasible] route {r_idx}가 fast_feasible_check_alns() 통과 실패: {route}")
             return False
 
         # ── ③ 적재량 음수 및 용량 초과 검사 ──────────────
@@ -80,7 +83,8 @@ def solution_feasible(routes, node_types, demands, capa, depot_idx):
             n = route[i]
             if node_types[n] == 1:  # delivery
                 if in_pick:
-                    print(f"[❌ solution_feasible] route {r_idx}: pickup 이후에 delivery 등장 → node {n}")
+                    if verbose:
+                        print(f"[❌ solution_feasible] route {r_idx}: pickup 이후에 delivery 등장 → node {n}")
                     return False
                 load += demands[n]
             else:  # pickup
@@ -90,16 +94,16 @@ def solution_feasible(routes, node_types, demands, capa, depot_idx):
                 load += demands[n]
 
             if load < 0:
-                print(f"[❌ solution_feasible] route {r_idx}: 적재량 음수 발생 at node {n}, load={load}")
+                if verbose:
+                    print(f"[❌ solution_feasible] route {r_idx}: 적재량 음수 발생 at node {n}, load={load}")
                 return False
             if load > capa:
-                print(f"[❌ solution_feasible] route {r_idx}: 적재량 초과 at node {n}, load={load}, capa={capa}")
+                if verbose:
+                    print(f"[❌ solution_feasible] route {r_idx}: 적재량 초과 at node {n}, load={load}, capa={capa}")
                 return False
 
     # ── 모든 검사 통과 ───────────────────────────────
     return True
-
-
 
 
 def alns_vrpb(
@@ -111,8 +115,15 @@ def alns_vrpb(
         depot_idx: int,
         max_vehicles: int,
         time_limit: float = 55.0,
+        verbose: bool = False,  # 로그 제어 매개변수 추가
 ) -> tuple[list[list[int]], float]:
-    print("[INFO] Start Improved ALNS with Enhanced Crossing Resolution")
+
+    def log(message: str, force: bool = False):
+        """로그 출력 함수 - verbose가 True이거나 force가 True일 때만 출력"""
+        if verbose or force:
+            print(message)
+
+    log("[INFO] Start Improved ALNS with Enhanced Crossing Resolution")
     PENALTY_FACTOR = 10000000
     _route_cost_cache: dict[tuple[int, ...], float] = {}
 
@@ -726,8 +737,8 @@ def alns_vrpb(
         return improved
 
     # 초기 해 검증
-    if not solution_feasible(init_routes, node_types, demands, capa, depot_idx):
-        print("[ERROR] Initial solution is infeasible!")
+    if not solution_feasible(init_routes, node_types, demands, capa, depot_idx, verbose):
+        log("[ERROR] Initial solution is infeasible!", force=True)
         return init_routes, float('inf')
 
     best_routes = [r[:] for r in init_routes]
@@ -755,10 +766,9 @@ def alns_vrpb(
     start = time.time()
     last_improvement = 0
 
-    print(f"[INFO] Initial solution: cost={best_cost:.1f}, routes={len(best_routes)}")
+    log(f"[INFO] Initial solution: cost={best_cost:.1f}, routes={len(best_routes)}")
 
     while time.time() - start < time_limit:
-        #print(f"[DEBUG] ALNS iteration {iteration}, elapsed = {time.time() - start:.2f} sec")
         iteration += 1
         elapsed = time.time() - start
 
@@ -770,7 +780,7 @@ def alns_vrpb(
                     cur_cost = new_cost
                     if new_cost < best_cost:
                         best_cost, best_routes = new_cost, [r[:] for r in cur_routes]
-                        print(f"[LOCAL] Iter {iteration}: Local search improved to {best_cost:.1f}")
+                        log(f"[LOCAL] Iter {iteration}: Local search improved to {best_cost:.1f}")
 
         max_retry = 3  # 재시도 횟수 줄임
         for retry in range(max_retry):
@@ -796,7 +806,7 @@ def alns_vrpb(
             if unassigned_nodes:
                 temp_routes = force_insert_all(unassigned_nodes, temp_routes)
 
-            if solution_feasible(temp_routes, node_types, demands, capa, depot_idx):
+            if solution_feasible(temp_routes, node_types, demands, capa, depot_idx, verbose):
                 break
 
         else:
@@ -817,7 +827,7 @@ def alns_vrpb(
             r_scores[r_idx] += 20
             accept = True
             last_improvement = iteration
-            print(f"[BEST] Iter {iteration}: New best cost {best_cost:.1f} (improved by {improvement:.1f})")
+            log(f"[BEST] Iter {iteration}: New best cost {best_cost:.1f} (improved by {improvement:.1f})")
         elif new_cost < cur_cost:
             cur_cost, cur_routes = new_cost, [r[:] for r in cur_routes]
             d_scores[d_idx] += 10
@@ -849,34 +859,35 @@ def alns_vrpb(
             update_weights(d_weights, d_scores, d_counts, reaction=0.2)
             update_weights(r_weights, r_scores, r_counts, reaction=0.2)
 
-        # 진행 상황 출력
+        # 진행 상황 출력 (verbose일 때만)
         if iteration % 150 == 0:
             crossings = calculate_crossing_penalty(cur_routes)
-            print(
+            log(
                 f"[ALNS][{elapsed:.1f}s] Iter {iteration:4d}: Current={cur_cost:.1f} ({len(cur_routes)} routes, {crossings} crossings), Best={best_cost:.1f} ({len(best_routes)} routes), T={T:.3f}")
 
     # 최종 집중적 지역 탐색
-    print("[INFO] Final intensive local search...")
+    log("[INFO] Final intensive local search...")
     final_improved = intensive_local_search(best_routes, start, time_limit)
     if final_improved:
         final_cost = calculate_total_cost(best_routes)
         if final_cost < best_cost:
             best_cost = final_cost
-            print(f"[FINAL] Final local search improved to {best_cost:.1f}")
+            log(f"[FINAL] Final local search improved to {best_cost:.1f}")
 
-    print(f"[INFO] Improved ALNS finished. Final best cost: {best_cost:.1f}")
+    log(f"[INFO] Improved ALNS finished. Final best cost: {best_cost:.1f}")
 
-    # 최종 결과 분석
-    visited = set(n for r in best_routes for n in r if n != depot_idx)
-    expected = set(i for i in range(len(node_types)) if i != depot_idx)
-    missed = expected - visited
+    # 최종 결과 분석 (verbose일 때만)
+    if verbose:
+        visited = set(n for r in best_routes for n in r if n != depot_idx)
+        expected = set(i for i in range(len(node_types)) if i != depot_idx)
+        missed = expected - visited
 
-    if missed:
-        print(f"[❌] 방문하지 않은 노드: {sorted(missed)}")
-    else:
-        print(f"[✅] 모든 노드 방문 완료")
+        if missed:
+            log(f"[❌] 방문하지 않은 노드: {sorted(missed)}", force=True)
+        else:
+            log(f"[✅] 모든 노드 방문 완료")
 
-    final_crossings = calculate_crossing_penalty(best_routes)
-    print(f"[INFO] 최종 교차 개수: {final_crossings}")
+        final_crossings = calculate_crossing_penalty(best_routes)
+        log(f"[INFO] 최종 교차 개수: {final_crossings}")
 
     return best_routes, best_cost
