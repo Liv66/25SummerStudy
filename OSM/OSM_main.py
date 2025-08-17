@@ -1,70 +1,85 @@
-import time # Ensure this is at the very top
+import time
 import json
+import matplotlib.pyplot as plt
 
-from OSM_util import plot_cvrp
 from OSM_ACO import ACO_VRPB
+from OSM_util import check_feasible
 
 
-def OSM_main():
-    """
-    VRPB 문제를 정의하고, ACO 솔버로 해결한 뒤, 결과를 출력/시각화합니다.
-    """
-    # --- 1. JSON 파일에서 문제 데이터 읽어오기 ---
-    file_path = 'C:/Users/risklab/Desktop/code/25SummerStudy/instances/problem_150_0.5.json'
-    
-    with open(file_path, 'r', encoding='utf-8') as f:
-        problem_data = json.load(f)
+def OSM_run(problem_info, time_limit=60, log=True):
 
-    # JSON 데이터로부터 파라미터 로드
-    N = problem_data['N']
-    K = problem_data['K']
-    capa = problem_data['capa']
-    all_node_coord = problem_data['node_coords']
+    start = time.time()
+    K = problem_info['K']
+    capa = problem_info['capa']
+    node_types_list = problem_info['node_types']
+    node_demands_list = problem_info['node_demands']
+    node_coords = problem_info['node_coords']
+    dist_mat = problem_info['dist_mat']
     
     demands = []
-    node_types_dict = {}
-    for i, node_type_val in enumerate(problem_data['node_types']):
-        demand_value = problem_data['node_demands'][i]
-        demands.append(demand_value if node_type_val == 1 else -demand_value if node_type_val == 2 else 0)
-        node_types_dict[i] = node_type_val
+    for i, node_type_val in enumerate(node_types_list):
+        demand_value = node_demands_list[i]
+        if node_type_val == 1:  # Linehaul
+            demands.append(demand_value)
+        elif node_type_val == 2:  # Backhaul
+            demands.append(-demand_value)
+        else:  # Depot
+            demands.append(0)
 
-    print(f"문제 파일 로드 완료: {file_path}")
-    print("ACO_VRPB 솔버를 시작합니다...")
+    aco_solver = ACO_VRPB(
+        iterations=100,
+        ants=K,
+        alpha=1,
+        beta=5,
+        ro=0.8,
+        th = 80,
+        q0 = 0.9
+    )
+
+    final_solution = aco_solver.solve(
+        K=K,
+        capa=capa,
+        node_coords=node_coords,
+        dist_mat=dist_mat,
+        demands=demands
+    )
     
-    aco_solver = ACO_VRPB(iterations=200, ants=K, q0=0.9, alpha=1, beta=5)
-    
-    start_time = time.time() # This should now be fine
-    ACO_solution = aco_solver.solve(K, capa, all_node_coord, demands)
-    print(f"ACO_solution 결과: {ACO_solution}")
-    end_time = time.time()
-    execution_time = end_time - start_time 
+    if final_solution and final_solution[1] != float('inf'):
+        solution_routes = final_solution[0] # Depot이 포함된 경로
+        elapsed_time = time.time() - start
 
-    # --- 3. 결과 처리 및 시각화 ---
-    if ACO_solution and ACO_solution[1] != float('inf'):
-        best_routes, best_distance = ACO_solution
-
-        print("\n--- 최종 결과 ---")
-        modified_best_routes_for_plot = [] # 이 리스트는 plot_cvrp를 위해 full_route를 저장합니다.
-        for idx, route in enumerate(best_routes):
-            full_route = [0] + route + [0] # 출발지(Depot 0)와 복귀지(Depot 0)를 추가합니다.
-            modified_best_routes_for_plot.append(full_route) # 시각화를 위한 리스트에 추가합니다.
-        for idx, route in enumerate(best_routes):
-            full_route = [0] + route + [0] # 출발지(Depot 0)와 복귀지(Depot 0)를 추가합니다.
-            modified_best_routes_for_plot.append(full_route) # 시각화를 위한 리스트에 추가합니다.
-            print(f'Vehicle {idx+1} route: {full_route}') # 여기서 full_route를 출력합니다.
-        print(f'>>> Total objective distance: {best_distance:.2f}')
-        print("\n최적 경로를 시각화합니다.")
-        plot_cvrp(
-            nodes_coord=all_node_coord,
-            best_result_route=best_routes, # plot_cvrp는 내부적으로 depot을 추가하므로 depot제외 경로 전달
-            demands=demands,
-            title=f'ACO_VRPB Solution ({file_path}) | Total Distance: {best_distance:.2f}'
+        if log:
+            print("\n--- Final Solution Validation ---")
+        final_cost = check_feasible(
+            problem_info=problem_info,
+            sol=solution_routes,
+            elapsed=elapsed_time,
+            timelimit=time_limit
         )
-    else:
-        print("\n알고리즘이 제약 조건을 만족하는 해답을 찾지 못했습니다.")
 
-if __name__ == '__main__':
-    start_overall_time = time.time() # This should also be fine
-    OSM_main()
-    end_overall_time = time.time()
-    print(f"\n--- 총 실행 시간: {end_overall_time - start_overall_time:.2f} 초 ---")
+        if final_cost > 0:
+            if log:
+                print(f"Validation PASSED. Final valid cost: {final_cost:.2f}")
+                print(solution_routes)
+            return solution_routes
+        else:
+            if log:
+                print("Validation FAILED. The solution is not feasible.")
+                print(solution_routes)
+            return [] # 유효하지 않으므로 빈 리스트 반환
+            
+    else:
+        if log:
+            print("ACO Solver could not find a valid solution.")
+        return []
+    
+
+
+if __name__ == "__main__":
+    file_path = 'C:/Users/risklab/Desktop/code/25SummerStudy/instances/problem_50_0.85.json'
+    
+    with open(file_path, 'r') as f:
+        problem_info = json.load(f)
+
+    OSM_run(problem_info=problem_info, time_limit=60)
+    

@@ -13,7 +13,7 @@ class ACO_VRPB:
         self.ants = ants
         self.q0 = q0
 
-    def initialize_aco_data(self, capa, node_coords, demands, dist_mat):
+    def initialize_aco_data(self, capa, node_coords, demands, dist_mat, log=False):
         graph = {i: coord for i, coord in enumerate(node_coords)}
         demand_dict = {i: d for i, d in enumerate(demands)}
         all_nodes = list(graph.keys())
@@ -21,9 +21,10 @@ class ACO_VRPB:
         linehaul_nodes = [node for node in all_nodes if demand_dict.get(node, 0) > 0]
         backhaul_nodes = [node for node in all_nodes if demand_dict.get(node, 0) < 0]
 
-        print(f"Depot: 0")
-        print(f"Linehaul nodes {len(linehaul_nodes)}: {linehaul_nodes}")
-        print(f"Backhaul nodes {len(backhaul_nodes)}: {backhaul_nodes}")
+        if log:
+            print(f"Depot: 0")
+            print(f"Linehaul nodes {len(linehaul_nodes)}: {linehaul_nodes}")
+            print(f"Backhaul nodes {len(backhaul_nodes)}: {backhaul_nodes}")
 
         edges = {}
         num_nodes = len(node_coords)
@@ -62,14 +63,33 @@ class ACO_VRPB:
         unvisited_customers = all_linehaul + all_backhaul
         random.shuffle(unvisited_customers)
 
-        # 2. 비용이 적은 곳으로 고객 배치 - greedy하게
-        for customer in unvisited_customers:
+        # 1. 초기 강제 할당 (Seeding) - 모든 차량에 고객을 1명씩 우선 할당
+        if len(unvisited_customers) >= K:
+            for i in range(K):
+                customer = unvisited_customers[i]
+                clusters[i].append(customer) # i번 차량에 i번 고객을 할당
+                last_nodes[i] = customer
+                
+                is_linehaul = demand[customer] > 0
+                if is_linehaul:
+                    linehaul_loads[i] += demand[customer]
+                else:
+                    backhaul_loads[i] += abs(demand[customer])
+            
+            # 이미 할당된 처음 K명의 고객을 제외한 나머지 고객 목록
+            remaining_customers = unvisited_customers[K:]
+        else:
+            # 고객 수가 차량 수보다 적으면, 일부 차량만 사용
+            remaining_customers = unvisited_customers
+
+        # 2. 나머지 고객들을 대상으로 기존의 Greedy 방식 적용
+        for customer in remaining_customers:
             best_vehicle_idx = -1
             min_insertion_cost = float('inf')
             is_linehaul = demand[customer] > 0
 
             for i in range(K):
-                # 용량 제약 조건
+                # (용량 제약 조건 및 비용 계산 로직은 기존과 동일)
                 if is_linehaul:
                     if linehaul_loads[i] + demand[customer] > capacityLimit:
                         continue
@@ -77,23 +97,24 @@ class ACO_VRPB:
                     if backhaul_loads[i] + abs(demand[customer]) > capacityLimit:
                         continue
                 
-                # 비용 계산 (마지막 노드에서 이 고객까지의 거리)
                 cost = edges.get((min(last_nodes[i], customer), max(last_nodes[i], customer)), float('inf'))
 
                 if cost < min_insertion_cost:
                     min_insertion_cost = cost
                     best_vehicle_idx = i
             
-            # 가장 비용이 적은 차량에 고객 할당
             if best_vehicle_idx != -1:
                 clusters[best_vehicle_idx].append(customer)
-                last_nodes[best_vehicle_idx] = customer # 차량의 마지막 위치 업데이트
+                last_nodes[best_vehicle_idx] = customer
                 if is_linehaul:
                     linehaul_loads[best_vehicle_idx] += demand[customer]
                 else:
                     backhaul_loads[best_vehicle_idx] += abs(demand[customer])
             else:
-                return []
+                # 할당할 수 있는 차량이 없는 경우 (문제 발생 가능성)
+                # 이 고객을 임시로 아무 차량에나 추가하거나, 예외 처리 필요
+                # 여기서는 가장 간단하게 첫 번째 차량에 추가
+                clusters[0].append(customer)
 
         # 3. 순서 결정 (ACO)
         solution = []
@@ -173,60 +194,149 @@ class ACO_VRPB:
         
         return bestSolution, feromones
 
+    def perturb_solution(self, solution_routes, K, edges, demand_dict, capacity, dist_matrix):
+        """
+        파괴와 재구성(Destroy and Repair)을 이용한 강력한 흔들기 연산.
+        (VRPB 제약조건 검사 로직이 추가된 완전한 버전)
+        """
+        new_routes = [list(path) for path in solution_routes]
 
-    def solve(self, K, capa, node_coords, demands, dist_mat):
-        # 초기화 (기존과 동일)
+        all_customers = [customer for path in new_routes for customer in path]
+        if not all_customers: return new_routes
+
+        num_to_remove = max(1, int(len(all_customers) * 0.20))
+        removed_customers = random.sample(all_customers, num_to_remove)
+
+        for i in range(len(new_routes)):
+            new_routes[i] = [customer for customer in new_routes[i] if customer not in removed_customers]
+
+        # 제거된 고객들을 다시 최적의 위치에 삽입
+        for customer in removed_customers:
+            best_insertion_info = {'cost': float('inf'), 'route_idx': -1, 'pos': -1}
+
+            for i, path in enumerate(new_routes):
+                # 제약조건 검사를 위해 필요한 정보 계산
+                demand_to_add = demand_dict.get(customer, 0)
+                is_customer_linehaul = demand_to_add > 0
+
+                current_linehaul_load = sum(demand_dict.get(n, 0) for n in path if demand_dict.get(n, 0) > 0)
+                current_backhaul_load = sum(abs(demand_dict.get(n, 0)) for n in path if demand_dict.get(n, 0) < 0)
+
+                last_linehaul_idx = -1
+                for idx, node in enumerate(path):
+                    if demand_dict.get(node, 0) > 0:
+                        last_linehaul_idx = idx
+
+                for pos in range(len(path) + 1):
+                    # 용량 및 방문 순서 제약조건 검사
+                    # --- 용량 확인 ---
+                    if is_customer_linehaul:
+                        if current_linehaul_load + demand_to_add > capacity:
+                            continue # 용량 초과 시 이 경로는 더 이상 고려하지 않음
+                    else:
+                        if current_backhaul_load + abs(demand_to_add) > capacity:
+                            continue # 용량 초과
+                        
+                    # --- 방문 순서 확인 ---
+                    if is_customer_linehaul and pos > last_linehaul_idx + 1:
+                        continue # Linehaul 고객은 Linehaul 구간 뒤에 삽입될 수 없음
+                    if not is_customer_linehaul and pos <= last_linehaul_idx + 1:
+                        continue # Backhaul 고객은 Linehaul 구간에 삽입될 수 없음
+
+                    # 3. 제약조건을 통과한 경우에만 비용 계산
+                    prev_node = path[pos-1] if pos > 0 else 0
+                    next_node = path[pos] if pos < len(path) else 0
+                    cost_increase = (edges.get((min(prev_node, customer), max(prev_node, customer)), float('inf')) +
+                                     edges.get((min(customer, next_node), max(customer, next_node)), float('inf')) -
+                                     edges.get((min(prev_node, next_node), max(prev_node, next_node)), 0))
+
+                    if cost_increase < best_insertion_info['cost']:
+                        best_insertion_info = {'cost': cost_increase, 'route_idx': i, 'pos': pos}
+
+            if best_insertion_info['route_idx'] != -1:
+                idx, pos = best_insertion_info['route_idx'], best_insertion_info['pos']
+                new_routes[idx].insert(pos, customer)
+
+        return new_routes
+
+    def solve(self, K, capa, node_coords, demands, dist_mat, log=False):
+        # 초기화
         linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, node_coords, demands, dist_mat)
         bestSolution = None
         dist_matrix = dist_mat
 
+        stac_count = 0
+        stac_limit = 3
+
         # 메인 루프
         for i in range(self.iterations):
+            
+            last_best_cost = bestSolution[1] if bestSolution else float('inf')
             solutions = []
+
             for _ in range(self.ants):
                 ant_solution = self.solution_one_ant_VRPB(K, linehaul, backhaul, edges, capacity, demand_dict, feromones, node_coords)
                 ant_distance = self.rate_solution(ant_solution, K, edges, demand_dict)
                 solutions.append((ant_solution, ant_distance))
-
-            # 페로몬 업데이트 및 현재까지의 최적해 선정
+            
             bestSolution, feromones = self.update_feromone(feromones, solutions, bestSolution)
 
-            # 2-opt 최적화를 메인 루프 안으로 이동
             if bestSolution and bestSolution[1] != float('inf'):
                 aco_routes = bestSolution[0]
+                # (2-opt 로직은 기존과 동일)
                 optimized_routes = []
                 for path in aco_routes:
                     if not path:
                         optimized_routes.append([])
                         continue
-                    
                     linehaul_part = [node for node in path if demand_dict.get(node, 0) > 0]
                     backhaul_part = [node for node in path if demand_dict.get(node, 0) < 0]
 
                     if len(linehaul_part) > 1:
                         _, opt_lh_route = two_opt([0] + linehaul_part, dist_matrix)
                         linehaul_part = opt_lh_route[1:] 
-
                     if len(backhaul_part) > 1:
                         start_node = linehaul_part[-1] if linehaul_part else 0
                         _, opt_bh_route = two_opt([start_node] + backhaul_part, dist_matrix)
                         backhaul_part = opt_bh_route[1:] 
-                    
                     optimized_routes.append(linehaul_part + backhaul_part)
-
-                # 2-opt 적용 후 성능이 개선되었는지 확인하고 최적해 업데이트
+                
                 optimized_distance = self.rate_solution(optimized_routes, K, edges, demand_dict)
                 if optimized_distance < bestSolution[1]:
-                    bestSolution = (optimized_routes, optimized_distance)
-                    print(f"Iteration {i+1}: 2-opt improved distance to {bestSolution[1]:.2f}")
+                    bestSolution = (optimized_routes, optimized_distance)            
+                    if log:
+                        print(f"Iteration {i+1}: 2-opt improved distance to {bestSolution[1]:.2f}")
+
+            if bestSolution and bestSolution[1] < last_best_cost:
+                stac_count = 0  # 개선되었으므로 카운터 리셋
+            else:
+                stac_count += 1 # 개선되지 않았으므로 카운터 증가
+
+            # 정체 한계에 도달하면 '크게 흔들기' 실행
+            if stac_count >= stac_limit:
+                if log:
+                    print(f"\n--- Stagnation detected for {stac_limit} iterations! Applying perturbation. ---")
+                perturbed_routes = self.perturb_solution(bestSolution[0], K, edges, demand_dict, capacity, dist_matrix)
+                perturbed_cost = self.rate_solution(perturbed_routes, K, edges, demand_dict)
+
+                # 흔들린 해가 더 좋을 경우, bestSolution을 '통째로' 교체
+                if perturbed_cost < bestSolution[1]:
+                    bestSolution = (perturbed_routes, perturbed_cost)
+                    if log:
+                        print(f"Perturbation resulted in a new best solution with cost: {perturbed_cost:.2f}")
+
+                feromones = {k: 1.0 for k in feromones.keys()}
+                stac_count = 0
 
             # 반복마다 현재 최적 거리 출력
             if bestSolution and bestSolution[1] != float('inf'):
-                print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}, Vehicles = {len(bestSolution[0])}")
+                if log:
+                    print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}")
             else:
-                print(f"Iteration {i+1}: Finding valid solution...")
+                if log:
+                    print(f"Iteration {i+1}: Finding valid solution...")
 
-        # ‼️ 3. 루프 종료 후, 최종적으로 찾은 bestSolution을 형식에 맞게 반환
+        # --- 루프 종료 후 최종 결과 반환 ---
         if bestSolution:
             routes, cost = bestSolution
             routes_with_depot = [[0] + r + [0] if r else [] for r in routes]
