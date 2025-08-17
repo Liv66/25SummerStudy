@@ -1,6 +1,7 @@
 import random
 import numpy
-from OSM_util import get_distance, two_opt
+import time
+from OSM_util import two_opt
 
 class ACO_VRPB:
     def __init__(self, alpha=1, beta=1.5, sigma=3, ro=0.8, th=80, iterations=200, ants=22, q0=0.9):
@@ -89,7 +90,6 @@ class ACO_VRPB:
             is_linehaul = demand[customer] > 0
 
             for i in range(K):
-                # (용량 제약 조건 및 비용 계산 로직은 기존과 동일)
                 if is_linehaul:
                     if linehaul_loads[i] + demand[customer] > capacityLimit:
                         continue
@@ -111,10 +111,8 @@ class ACO_VRPB:
                 else:
                     backhaul_loads[best_vehicle_idx] += abs(demand[customer])
             else:
-                # 할당할 수 있는 차량이 없는 경우 (문제 발생 가능성)
-                # 이 고객을 임시로 아무 차량에나 추가하거나, 예외 처리 필요
-                # 여기서는 가장 간단하게 첫 번째 차량에 추가
-                clusters[0].append(customer)
+                # 할당할 수 있는 차량을 찾지 못했다면 빈 리스트를 반환하여 실패 처리
+                return []
 
         # 3. 순서 결정 (ACO)
         solution = []
@@ -256,10 +254,12 @@ class ACO_VRPB:
             if best_insertion_info['route_idx'] != -1:
                 idx, pos = best_insertion_info['route_idx'], best_insertion_info['pos']
                 new_routes[idx].insert(pos, customer)
+            else:
+                return solution_routes
 
         return new_routes
 
-    def solve(self, K, capa, node_coords, demands, dist_mat, log=False):
+    def solve(self, K, capa, node_coords, demands, dist_mat, start_time, time_limit, log=False):
         # 초기화
         linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, node_coords, demands, dist_mat)
         bestSolution = None
@@ -270,7 +270,12 @@ class ACO_VRPB:
 
         # 메인 루프
         for i in range(self.iterations):
-            
+
+            if time.time() - start_time > time_limit:
+                if log:
+                    print("\nTime limit (57s) reached. Terminating search and returning best solution found.")
+                break  # for 루프를 탈출
+
             last_best_cost = bestSolution[1] if bestSolution else float('inf')
             solutions = []
 
@@ -317,6 +322,13 @@ class ACO_VRPB:
                 if log:
                     print(f"\n--- Stagnation detected for {stac_limit} iterations! Applying perturbation. ---")
                 perturbed_routes = self.perturb_solution(bestSolution[0], K, edges, demand_dict, capacity, dist_matrix)
+                if any(not route for route in perturbed_routes):
+                    # 빈 경로가 있다면, 이번 흔들기는 무효 처리하고 다음 반복으로 넘어감
+                    if log:
+                        print("Perturbation resulted in unused vehicles. Discarding this shake and continuing.")
+                    stac_count = 0
+                    continue
+
                 perturbed_cost = self.rate_solution(perturbed_routes, K, edges, demand_dict)
 
                 # 흔들린 해가 더 좋을 경우, bestSolution을 '통째로' 교체
@@ -343,69 +355,3 @@ class ACO_VRPB:
             return (routes_with_depot, cost)
         else:
             return bestSolution
-
-
-"""
-    def solve(self, K, capa, node_coords, demands, dist_mat):
-        linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, node_coords, demands, dist_mat)
-        bestSolution = None
-        dist_matrix = dist_mat
-
-        # 메인 루프
-        for i in range(self.iterations):
-            solutions = []
-            for _ in range(self.ants):
-                ant_solution = self.solution_one_ant_VRPB(K, linehaul, backhaul, edges, capacity, demand_dict, feromones, node_coords)
-                ant_distance = self.rate_solution(ant_solution, K, edges, demand_dict)
-                solutions.append((ant_solution, ant_distance))
-
-            bestSolution, feromones = self.update_feromone(feromones, solutions, bestSolution)
-
-            if bestSolution and bestSolution[1] != float('inf'):
-                print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}, Vehicles = {len(bestSolution[0])}")
-            else:
-                print(f"Iteration {i+1}: Finding valid solution...")
-
-        # 배송/반봉 분할해서 2-opt 적용
-        if bestSolution and bestSolution[1] != float('inf'):
-            print("\n--- Applying split 2-opt to the final solution... ---")
-
-            aco_routes = bestSolution[0]
-
-            optimized_routes = []
-            for path in aco_routes:
-                if not path:
-                    optimized_routes.append([])
-                    continue
-
-                # 1. 배송 / 반송 분리
-                linehaul_part = [node for node in path if demand_dict.get(node, 0) > 0]
-                backhaul_part = [node for node in path if demand_dict.get(node, 0) < 0]
-
-                # 2. 배송 / 반송 나누어서 2-opt 실행
-                if len(linehaul_part) > 1:
-                    _, opt_lh_route = two_opt([0] + linehaul_part, dist_matrix)
-                    linehaul_part = opt_lh_route[1:] 
-
-                if len(backhaul_part) > 1:
-                    start_node = linehaul_part[-1] if linehaul_part else 0
-                    _, opt_bh_route = two_opt([start_node] + backhaul_part, dist_matrix)
-                    backhaul_part = opt_bh_route[1:] 
-
-                # 3. 배송 / 반송 나누었던 거 다시 결합
-                optimized_routes.append(linehaul_part + backhaul_part)
-
-            # 개선된 경로로 최종 거리 재계산
-            final_distance = self.rate_solution(optimized_routes, K, edges, demand_dict)
-            routes_with_depot = [[0] + route + [0] if route else [] for route in optimized_routes]
-            final_solution = (routes_with_depot, final_distance)
-
-            return final_solution
-        else:
-            if bestSolution:
-                routes, cost = bestSolution
-                routes_with_depot = [[0] + r + [0] if r else [] for r in routes]
-                return (routes_with_depot, cost)
-            else:
-                return bestSolution
-"""

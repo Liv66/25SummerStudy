@@ -61,50 +61,6 @@ def plot_cvrp(nodes_coord, best_result_route, title='', demands=None):
     plt.grid(True)
     plt.legend()
     plt.show()
-
-def multiple_knapsack_vrpb(demands_dict, capa, K, nodes_coord):
-    """
-    CP-SAT 솔버를 사용하여 VRPB의 고객들을 K개의 그룹으로 나눕니다.
-    (용량 제약 조건만 만족하는 유효한 해를 빠르게 찾는 데 집중)
-    """
-    customers = [k for k in demands_dict if k != 0]
-    cust_to_idx = {cust_id: i for i, cust_id in enumerate(customers)}
-    idx_to_cust = {i: cust_id for i, cust_id in enumerate(customers)}
-    num_customers = len(customers)
-
-    model = cp_model.CpModel()
-    x = [[model.NewBoolVar(f'x_{i}_{j}') for j in range(K)] for i in range(num_customers)]
-
-    for i in range(num_customers):
-        model.AddExactlyOne(x[i][j] for j in range(K))
-
-    for j in range(K):
-        linehaul_load = sum(demands_dict[idx_to_cust[i]] * x[i][j] 
-                            for i in range(num_customers) if demands_dict[idx_to_cust[i]] > 0)
-        model.Add(linehaul_load <= capa)
-        backhaul_load = sum(abs(demands_dict[idx_to_cust[i]]) * x[i][j] 
-                            for i in range(num_customers) if demands_dict[idx_to_cust[i]] < 0)
-        model.Add(backhaul_load <= capa)
-
-    # --- 목표(Objective) 설정 부분 삭제 ---
-    # model.Minimize(...) 부분을 제거하여, 제약 조건만 만족하는
-    # '가능한 해(feasible solution)'를 빠르게 찾도록 함
-
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 10.0
-    status = solver.Solve(model)
-
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        clusters = [[] for _ in range(K)]
-        for i in range(num_customers):
-            for j in range(K):
-                if solver.Value(x[i][j]) == 1:
-                    clusters[j].append(idx_to_cust[i])
-                    break
-        return clusters
-    else:
-        print("Warning: Could not find a valid clustering solution.")
-        return None
     
 def check_feasible(problem_info, sol, elapsed, timelimit):
     K = problem_info['K']
