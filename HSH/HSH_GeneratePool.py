@@ -1,4 +1,4 @@
-# HSH_GeneratePool: Pool 생성, 관리
+# GeneratePool - Pool 생성, 관리
 import random, time, json
 from typing import List, Dict
 

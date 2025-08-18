@@ -1,4 +1,4 @@
-# HSH_SP: Set Partitioning
+# Set Partitioning
 from gurobipy import Model, GRB, quicksum
 from typing import List, Dict
 from HSH.HSH_GeneratePool import run_pooling_loop
@@ -104,7 +104,6 @@ def run_set_partitioning(N, K, dist_mat, pool: List[List[int]]):
                 # print(f"  -> 거리: {cost:.2f}\n")
                 total_cost += cost
 
-        print(f"\n총 이동 거리: {model.objVal:.2f}")
         # plot_routes(instance, selected_routes)
 
         # print("\n[전체 경로 리스트]")
