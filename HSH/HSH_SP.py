@@ -7,11 +7,9 @@ import matplotlib.pyplot as plt
 from matplotlib import colormaps
 import time, random
 
-def plot_routes(instance: Dict, routes: List[List[int]]):
-    coords = instance['node_coords']
-    types = instance['node_types']
-    depot_index = 0
-    num_nodes = instance['N']
+def plot_routes(problem_info: Dict, node_type, N, routes: List[List[int]]):
+    coords = problem_info['node_coords']
+    depot = 0
     plt.figure(figsize=(8, 10))
     colors = colormaps['tab20'].resampled(len(routes))
 
@@ -27,17 +25,17 @@ def plot_routes(instance: Dict, routes: List[List[int]]):
         plt.plot(xs, ys, color=colors(idx), label=f'Route {idx + 1}')
         for i in route:
             x, y = coords[i]
-            if i == depot_index:
+            if i == depot:
                 if not legend_label_flag:
                     plt.scatter(x, y, color='black', marker='s', s=200, label='Depot')
                     legend_label_flag = False
-            elif types[i] == 1:
+            elif node_type[i] == 1:
                 plt.scatter(x, y, color=colors(idx), marker='o', s=80)
-            elif types[i] == 2:
+            elif node_type[i] == 2:
                 plt.scatter(x, y, color=colors(idx), marker='^', s=80)
 
     # 미방문 노드
-    unvisited_nodes = [i for i in range(num_nodes) if i != depot_index and i not in visited_nodes]
+    unvisited_nodes = [i for i in range(N) if i != depot and i not in visited_nodes]
     for i in unvisited_nodes:
         x, y = coords[i]
         plt.scatter(x, y, color='gray', marker='x', s=80)
@@ -50,18 +48,14 @@ def plot_routes(instance: Dict, routes: List[List[int]]):
     plt.legend()
     plt.show()
 
-def run_set_partitioning(instance: Dict, pool: List[List[int]]):
-    N = instance["N"]
+def run_set_partitioning(N, K, dist_mat, pool: List[List[int]]):
     depot = 0
-    dist = instance["dist_mat"]
-    num_vehicles = instance["K"]
-    types = instance["node_types"]
 
     customer_indices = set(range(N))
     customer_indices.discard(depot)
 
     model = Model("SetPartitioning")
-    model.setParam("OutputFlag", 1)
+    model.setParam("OutputFlag", 0)
 
     # route 변수 생성
     route_vars = []
@@ -80,14 +74,14 @@ def run_set_partitioning(instance: Dict, pool: List[List[int]]):
 
     # 선택된 route 수는 차량 수 이하여야 함
     model.addConstr(
-        quicksum(route_vars) <= num_vehicles,
+        quicksum(route_vars) <= K,
         name="vehicle_limit"
     )
 
     # 목적함수: 총 이동 거리 최소화
     model.setObjective(
         quicksum(
-            route_vars[r_idx] * sum(dist[route[i]][route[i + 1]] for i in range(len(route) - 1))
+            route_vars[r_idx] * sum(dist_mat[route[i]][route[i + 1]] for i in range(len(route) - 1))
             for r_idx, route in enumerate(pool)
         ),
         GRB.MINIMIZE
@@ -96,7 +90,7 @@ def run_set_partitioning(instance: Dict, pool: List[List[int]]):
     model.optimize()
 
     if model.status == GRB.OPTIMAL:
-        print("\n[선택된 최적 route 조합]")
+        # print("\n[선택된 최적 route 조합]")
         selected_routes = []
         total_cost = 0
         for r_idx, var in enumerate(route_vars):
@@ -104,47 +98,41 @@ def run_set_partitioning(instance: Dict, pool: List[List[int]]):
                 route = pool[r_idx]
                 selected_routes.append(route)
 
-                node_types = [0 if node == depot else (1 if types[node] == 1 else 2) for node in route]
-                cost = sum(dist[route[i]][route[i + 1]] for i in range(len(route) - 1))
-                print(f"Route {len(selected_routes)}: {route}")
-                print(f"  -> node_types: {node_types}")
-                print(f"  -> 거리: {cost:.2f}\n")
+                # node_types = [0 if node == depot else (1 if node_type[node] == 1 else 2) for node in route]
+                cost = sum(dist_mat[route[i]][route[i + 1]] for i in range(len(route) - 1))
+                # print(f"Route {len(selected_routes)}: {route}")
+                # print(f"  -> node_types: {node_types}")
+                # print(f"  -> 거리: {cost:.2f}\n")
                 total_cost += cost
 
-        print(f"\n[총 이동 거리(SP 최적화 결과)] {total_cost:.2f}")
-        plot_routes(instance, selected_routes)
+        print(f"\n총 이동 거리: {model.objVal:.2f}")
+        # plot_routes(instance, selected_routes)
 
-        print("\n[전체 경로 리스트]")
+        # print("\n[전체 경로 리스트]")
         print("[", end="")
         for i, route in enumerate(selected_routes):
             print(route, end=",\n" if i < len(selected_routes) - 1 else "")
         print("]")
         return selected_routes
+
     else:
         print("No optimal solution found.")
 
-def validate_solution(instance: Dict, selected_routes: List[List[int]]):
-    print("\n[검증 결과]")
-
-    N = instance["N"]
+def validate_solution(N, K, node_type, node_demand, capa, selected_routes: List[List[int]]):
     depot = 0
-    K = instance["K"]
-    types = instance["node_types"]
-    demands = instance['node_demands']
-    capacity = instance["capa"]
 
     # 차량 수 확인
     num_used_vehicles = len(selected_routes)
     cond1 = num_used_vehicles <= K
     print(f"1. 사용한 차량 수: {num_used_vehicles} / K = {K} → {cond1}")
 
-    # 각 경로의 node types
+    # 각 경로의 node node_type
     all_node_types = []
     cond3_list = []
     for idx, route in enumerate(selected_routes):
-        type_seq = [0 if node == depot else types[node] for node in route]
+        type_seq = [0 if node == depot else node_type[node] for node in route]
         all_node_types.append(type_seq)
-        print(f"2. 차량 {idx+1} node types: {type_seq}")
+        print(f"2. 차량 {idx+1} node node_type: {type_seq}")
 
         # depot으로 시작/끝, 1 포함, 1-2-1 없는지
         has_linehaul = 1 in type_seq
@@ -176,8 +164,8 @@ def validate_solution(instance: Dict, selected_routes: List[List[int]]):
         after_backhaul = False
 
         # depot에서 출발할 때 실어야 할 총 linehaul 수요 계산
-        linehaul_nodes = [node for node in route[1:-1] if types[node] == 1]
-        load = sum(demands[node] for node in linehaul_nodes)
+        linehaul_nodes = [node for node in route[1:-1] if node_type[node] == 1]
+        load = sum(node_demand[node] for node in linehaul_nodes)
 
         for node in route:
             if node == depot:
@@ -187,39 +175,44 @@ def validate_solution(instance: Dict, selected_routes: List[List[int]]):
                 continue
             visited.add(node)
 
-            if types[node] == 1:
+            if node_type[node] == 1:
                 if after_backhaul:
                     load = float('inf')
                 else:
-                    load -= demands[node]
-            elif types[node] == 2:
+                    load -= node_demand[node]
+            elif node_type[node] == 2:
                 if not after_backhaul:
                     after_backhaul = True
                     load = 0
-                load += demands[node]
+                load += node_demand[node]
 
             load_seq.append(load)
 
-        feasible = all(0 <= l <= capacity for l in load_seq)
+        feasible = all(0 <= l <= capa for l in load_seq)
         cond6_list.append(feasible)
         print(f"6. 차량 {idx + 1} 적재량 변화: {load_seq} → {'Y' if feasible else 'N'}")
     print(f"6. 모든 차량에서 용량 초과 없음 → {all(cond6_list)}")
 
 if __name__ == '__main__':
     random.seed(42)
-    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_150_0.5.json")
-    instance["node_demands"] = [abs(d) for d in instance["node_demands"]]
+    problem_info = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_130_0.85.json")
+    N = problem_info["N"]
+    K = problem_info["K"]
+    node_type = problem_info['node_types']
+    node_demand = [abs(d) for d in problem_info["node_demands"]]
+    capa = problem_info['capa']
+    dist_mat = problem_info['dist_mat']
 
     start_time = time.time()
 
-    pool = run_pooling_loop(instance, duration_seconds = 55)
+    pool = run_pooling_loop(N, K, node_type, node_demand, capa, dist_mat)
 
     print(f"\n[총 수집된 고유 route 개수] {len(pool)}개")
 
-    selected_routes = run_set_partitioning(instance, pool)
+    selected_routes = run_set_partitioning(N, K, dist_mat, pool)
     end_time = time.time()
 
     print(f"\n[전체 알고리즘 실행 시간] {end_time - start_time:.2f}초")
 
     if selected_routes:
-        validate_solution(instance, selected_routes)
+        validate_solution(N, K, node_type, node_demand, capa, selected_routes)
