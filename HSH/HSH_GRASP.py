@@ -3,7 +3,6 @@ import random
 from typing import List, Dict
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
-from HSH.HSH_loader import load_instance_from_json
 import json
 
 def generate_grasp_routes(N, K, node_type, node_demand, capa, dist_mat) -> List[List[int]]:
@@ -112,7 +111,8 @@ def plot_routes(instance: Dict, routes: List[List[int]]):
 
 if __name__ == '__main__':
     random.seed(42)
-    problem_info = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_20_0.7.json")
+    with open(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_130_0.85.json", encoding="utf-8") as f:
+        problem_info = json.load(f)
     N = problem_info['N']
     K = problem_info['K']
     node_type = problem_info['node_types']

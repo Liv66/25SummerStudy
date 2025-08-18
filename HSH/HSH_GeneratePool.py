@@ -1,11 +1,9 @@
 # HSH_GeneratePool: Pool 생성, 관리
-import time
-import random
-from typing import List, Dict, Tuple
+import random, time, json
+from typing import List, Dict
 
 from HSH.HSH_GRASP import generate_grasp_routes
 from HSH.HSH_TS import tabu_search
-from HSH.HSH_loader import load_instance_from_json
 
 class SolPool:
     """
@@ -79,7 +77,8 @@ def run_pooling_loop(N, K, node_type, node_demand, capa, dist_mat) -> List[List[
 
 if __name__ == '__main__':
     random.seed(42)
-    problem_info = load_instance_from_json(r"C:\\Users\\seohyun\\Desktop\\25SummerStudy\\instances\\problem_130_0.85.json")
+    with open(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_130_0.85.json", encoding="utf-8") as f:
+        problem_info = json.load(f)
     N = problem_info['N']
     K = problem_info['K']
     node_type = problem_info['node_types']

@@ -1,8 +1,5 @@
-# HSH_main: main
-from HSH.HSH_GeneratePool import run_pooling_loop
-from HSH.HSH_SP import run_set_partitioning
+from HSH.HSH_SP import *
 import json, random, time
-from typing import Dict
 
 def HSH_algorithm(problem_info):
     N = problem_info["N"]

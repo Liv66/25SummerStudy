@@ -1,12 +1,10 @@
 # HSH_TS: Tabu Search
-from typing import List, Dict, Tuple
+from typing import List, Dict
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
-import random
-from HSH_GRASP import generate_grasp_routes
-from HSH_loader import load_instance_from_json
+from HSH.HSH_GRASP import generate_grasp_routes
 from collections import deque
-import copy
+import copy, json, random
 
 # 경로 거리 계산
 def route_distance(route: List[int], dist_mat: List[List[float]]) -> float:
@@ -401,7 +399,8 @@ def plot_routes(instance: Dict, routes: List[List[int]]):
 
 if __name__ == '__main__':
     random.seed(42)
-    problem_info = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_130_0.85.json")
+    with open(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_130_0.85.json", encoding="utf-8") as f:
+        problem_info = json.load(f)
     problem_info["node_demands"] = [abs(d) for d in problem_info["node_demands"]]
     N = problem_info['N']
     K = problem_info['K']
