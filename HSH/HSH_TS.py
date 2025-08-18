@@ -1,26 +1,29 @@
-# HSH_TS: Tabu Search
-from typing import List, Dict, Tuple
+# Tabu Search(TS)
+from typing import List, Dict
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
-import random
+from HSH.HSH_GRASP import generate_grasp_routes
+from collections import deque
+import copy, json, random
 
 # 경로 거리 계산
-def route_distance(route: List[int], dist: List[List[float]]) -> float:
-    return sum(dist[route[i]][route[i+1]] for i in range(len(route)-1))
+def route_distance(route: List[int], dist_mat: List[List[float]]) -> float:
+    return sum(dist_mat[route[i]][route[i + 1]] for i in range(len(route) - 1))
 
 # 경로 유효성 검사
-def is_feasible(route: List[int], types: List[int], demands: List[int], capacity: int, depot: int) -> bool:
+def is_feasible(route: List[int], node_type: List[int], node_demand: List[int], capa: int) -> bool:
+    depot = 0
     if route[0] != depot or route[-1] != depot:
         return False
 
     visited = set()
     after_backhaul = False
 
-    linehaul_nodes = [node for node in route[1:-1] if types[node] == 1]
+    linehaul_nodes = [node for node in route[1:-1] if node_type[node] == 1]
 
     # linehaul 수요 합이 capacity 초과면 infeasible
-    total_linehaul_demand = sum(demands[node] for node in linehaul_nodes)
-    if total_linehaul_demand > capacity:
+    total_linehaul_demand = sum(node_demand[node] for node in linehaul_nodes)
+    if total_linehaul_demand > capa:
         return False
 
     load = total_linehaul_demand
@@ -30,28 +33,25 @@ def is_feasible(route: List[int], types: List[int], demands: List[int], capacity
             return False
         visited.add(node)
 
-        if types[node] == 1:
+        if node_type[node] == 1:
             if after_backhaul:
                 return False  # backhaul 이후에 linehaul이 나오면 오류
-            load -= demands[node]
+            load -= node_demand[node]
             if load < 0:
                 return False
-        elif types[node] == 2:
+        elif node_type[node] == 2:
             if not after_backhaul:
                 after_backhaul = True
                 load = 0
-            load += demands[node]
-            if load > capacity:
+            load += node_demand[node]
+            if load > capa:
                 return False
 
     return True
 
-def check_capacity_violation(instance: Dict, routes: List[List[int]]):
+def check_capacity_violation(node_type, node_demand, capa, routes: List[List[int]]):
     print("\n[용량 초과 여부 점검]")
 
-    types = instance["node_types"]
-    demands = instance["node_demands"]
-    capacity = instance["capa"]
     depot = 0
 
     for idx, route in enumerate(routes):
@@ -59,8 +59,8 @@ def check_capacity_violation(instance: Dict, routes: List[List[int]]):
         visited = set()
         after_backhaul = False
 
-        linehaul_nodes = [node for node in route[1:-1] if types[node] == 1]
-        load = sum(demands[node] for node in linehaul_nodes)
+        linehaul_nodes = [node for node in route[1:-1] if node_type[node] == 1]
+        load = sum(node_demand[node] for node in linehaul_nodes)
 
         for node in route:
             if node == depot:
@@ -70,50 +70,41 @@ def check_capacity_violation(instance: Dict, routes: List[List[int]]):
                 continue
             visited.add(node)
 
-            if types[node] == 1:
+            if node_type[node] == 1:
                 if after_backhaul:
                     load = float('inf') # 순서 오류
                 else:
-                    load -= demands[node]
-            elif types[node] == 2:
+                    load -= node_demand[node]
+            elif node_type[node] == 2:
                 if not after_backhaul:
                     after_backhaul = True
                     load = 0
-                load += demands[node]
+                load += node_demand[node]
 
             load_seq.append(load)
 
-        feasible = all(0 <= l <= capacity for l in load_seq)
+        feasible = all(0 <= l <= capa for l in load_seq)
         status = "Y" if feasible else "N"
         print(f"차량 {idx + 1} 적재량 변화: {load_seq} → {status}")
 
-def tabu_search(instance: Dict, route_set: List[List[int]], max_iter: int = 50, tabu_tenure: int = 9) -> List[List[int]]:
-    from collections import deque
-    import copy
-
-    dist = instance["dist_mat"]
-    types = instance["node_types"]
-    demands = instance["node_demands"]
-    capacity = instance["capa"]
+def tabu_search(N, node_type, node_demand, capa, dist_mat, route_set: List[List[int]], max_iter: int = 100, tabu_tenure: int = 13) -> List[List[int]]:
     depot = 0
 
     # 근접 후보 수(Granular Neighborhood)
     nn_m = 12
-
-    N = len(dist)
-    nearest = [sorted(range(N), key=lambda j: dist[i][j])[:nn_m] for i in range(N)]
+    nearest = [sorted(range(N), key=lambda j: dist_mat[i][j])[:nn_m] for i in range(N)]
 
     def rcost(route: List[int]) -> float:
-        return sum(dist[route[i]][route[i+1]] for i in range(len(route)-1))
+        return sum(dist_mat[route[i]][route[i+1]] for i in range(len(route)-1))
 
     def pivot_idx(route: List[int]) -> int:
         for t in range(1, len(route)-1):
-            if types[route[t]] == 2:
+            if node_type[route[t]] == 2:
                 return t
         return len(route)-1
 
     def feasible(route: List[int]) -> bool:
-        return is_feasible(route, types, demands, capacity, depot)
+        return is_feasible(route, node_type, node_demand, capa)
 
     # 초기화
     current_solution = copy.deepcopy(route_set)
@@ -148,7 +139,7 @@ def tabu_search(instance: Dict, route_set: List[List[int]], max_iter: int = 50, 
                 for k in range(i+1, p):
                     a, b = route[i-1], route[i]
                     c, d = route[k], route[k+1]
-                    delta = (dist[a][c] + dist[b][d]) - (dist[a][b] + dist[c][d])
+                    delta = (dist_mat[a][c] + dist_mat[b][d]) - (dist_mat[a][b] + dist_mat[c][d])
                     if delta >= best_neighbor_delta:
                         continue
                     new_r = route[:i] + route[i:k+1][::-1] + route[k+1:]
@@ -167,7 +158,7 @@ def tabu_search(instance: Dict, route_set: List[List[int]], max_iter: int = 50, 
                 for k in range(i+1, L-1):
                     a, b = route[i-1], route[i]
                     c, d = route[k], route[k+1]
-                    delta = (dist[a][c] + dist[b][d]) - (dist[a][b] + dist[c][d])
+                    delta = (dist_mat[a][c] + dist_mat[b][d]) - (dist_mat[a][b] + dist_mat[c][d])
                     if delta >= best_neighbor_delta:
                         continue
                     new_r = route[:i] + route[i:k+1][::-1] + route[k+1:]
@@ -196,9 +187,9 @@ def tabu_search(instance: Dict, route_set: List[List[int]], max_iter: int = 50, 
                     for ins in range(1, p-(blk-1)):
                         if ins >= s and ins <= s+blk:
                             continue
-                        delta_rem = (dist[a][d] - (dist[a][b] + dist[c][d]))
+                        delta_rem = (dist_mat[a][d] - (dist_mat[a][b] + dist_mat[c][d]))
                         u = route[ins-1]; v = route[ins]
-                        delta_ins = (dist[u][b] + dist[c][v] - dist[u][v])
+                        delta_ins = (dist_mat[u][b] + dist_mat[c][v] - dist_mat[u][v])
                         delta = delta_rem + delta_ins
                         if delta >= best_neighbor_delta:
                             continue
@@ -221,9 +212,9 @@ def tabu_search(instance: Dict, route_set: List[List[int]], max_iter: int = 50, 
                     for ins in range(max(p,1), L-(blk-1)):
                         if ins >= s and ins <= s+blk:
                             continue
-                        delta_rem = (dist[a][d] - (dist[a][b] + dist[c][d]))
+                        delta_rem = (dist_mat[a][d] - (dist_mat[a][b] + dist_mat[c][d]))
                         u = route[ins-1]; v = route[ins]
-                        delta_ins = (dist[u][b] + dist[c][v] - dist[u][v])
+                        delta_ins = (dist_mat[u][b] + dist_mat[c][v] - dist_mat[u][v])
                         delta = delta_rem + delta_ins
                         if delta >= best_neighbor_delta:
                             continue
@@ -257,8 +248,8 @@ def tabu_search(instance: Dict, route_set: List[List[int]], max_iter: int = 50, 
                         iu0, iu1 = ri[ai-1], ri[ai+1]
                         jv0, jv1 = rj[aj-1], rj[aj+1]
                         delta = 0.0
-                        delta += (dist[iu0][v] + dist[v][iu1] - (dist[iu0][u] + dist[u][iu1]))
-                        delta += (dist[jv0][u] + dist[u][jv1] - (dist[jv0][v] + dist[v][jv1]))
+                        delta += (dist_mat[iu0][v] + dist_mat[v][iu1] - (dist_mat[iu0][u] + dist_mat[u][iu1]))
+                        delta += (dist_mat[jv0][u] + dist_mat[u][jv1] - (dist_mat[jv0][v] + dist_mat[v][jv1]))
                         if delta >= best_neighbor_delta:
                             continue
                         new_i = ri[:]; new_i[ai] = v
@@ -277,19 +268,19 @@ def tabu_search(instance: Dict, route_set: List[List[int]], max_iter: int = 50, 
                 # BH <-> BH
                 for ai in range(max(pi,1), len(ri)-1):
                     u = ri[ai]
-                    if types[u] != 2:
+                    if node_type[u] != 2:
                         continue
                     for aj in range(max(pj,1), len(rj)-1):
                         v = rj[aj]
-                        if types[v] != 2:
+                        if node_type[v] != 2:
                             continue
                         if (v not in nearest[u]) and (u not in nearest[v]):
                             continue
                         iu0, iu1 = ri[ai-1], ri[ai+1]
                         jv0, jv1 = rj[aj-1], rj[aj+1]
                         delta = 0.0
-                        delta += (dist[iu0][v] + dist[v][iu1] - (dist[iu0][u] + dist[u][iu1]))
-                        delta += (dist[jv0][u] + dist[u][jv1] - (dist[jv0][v] + dist[v][jv1]))
+                        delta += (dist_mat[iu0][v] + dist_mat[v][iu1] - (dist_mat[iu0][u] + dist_mat[u][iu1]))
+                        delta += (dist_mat[jv0][u] + dist_mat[u][jv1] - (dist_mat[jv0][v] + dist_mat[v][jv1]))
                         if delta >= best_neighbor_delta:
                             continue
                         new_i = ri[:]; new_i[ai] = v
@@ -326,9 +317,9 @@ def tabu_search(instance: Dict, route_set: List[List[int]], max_iter: int = 50, 
 
                         a, b = route_from[idx-1], node
                         c = route_from[idx+1]
-                        delta_rem = dist[a][c] - (dist[a][b] + dist[b][c])
+                        delta_rem = dist_mat[a][c] - (dist_mat[a][b] + dist_mat[b][c])
                         u, v = route_to[insert_pos-1], route_to[insert_pos]
-                        delta_ins = (dist[u][node] + dist[node][v] - dist[u][v])
+                        delta_ins = (dist_mat[u][node] + dist_mat[node][v] - dist_mat[u][v])
                         delta = delta_rem + delta_ins
                         if delta >= best_neighbor_delta:
                             continue
@@ -408,18 +399,23 @@ def plot_routes(instance: Dict, routes: List[List[int]]):
 
 if __name__ == '__main__':
     random.seed(42)
-    from HSH_GRASP import generate_grasp_routes
-    from HSH_loader import load_instance_from_json
+    with open(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_130_0.85.json", encoding="utf-8") as f:
+        problem_info = json.load(f)
+    problem_info["node_demands"] = [abs(d) for d in problem_info["node_demands"]]
+    N = problem_info['N']
+    K = problem_info['K']
+    node_type = problem_info['node_types']
+    node_demand = [abs(d) for d in problem_info["node_demands"]]
+    capa = problem_info['capa']
+    dist_mat = problem_info['dist_mat']
 
-    instance = load_instance_from_json(r"C:\Users\seohyun\Desktop\25SummerStudy\instances\problem_130_0.85.json")
-    instance["node_demands"] = [abs(d) for d in instance["node_demands"]]
-    route_set = generate_grasp_routes(instance, alpha=0.3)
-    dist = instance['dist_mat']
+    route_set = generate_grasp_routes(N, K, node_type, node_demand, capa, dist_mat)
+
     print("[GRASP로 생성된 초기 경로]")
     total_grasp_distance = 0
     for idx, route in enumerate(route_set):
         print(f"차량 {idx+1}: {route}")
-        d = route_distance(route, dist)
+        d = route_distance(route, dist_mat)
         print(f"  -> 경로 {idx+1} 거리: {d:.2f}")
         total_grasp_distance += d
     print(f"[총 이동 거리 (GRASP)] {total_grasp_distance:.2f}\n")
@@ -427,26 +423,24 @@ if __name__ == '__main__':
     visited_grasp = set()
     for route in route_set:
         visited_grasp.update(route)
-    unvisited_grasp = [i for i in range(instance["N"]) if i != 0 and i not in visited_grasp]
+    unvisited_grasp = [i for i in range(N) if i != 0 and i not in visited_grasp]
     print(f"[GRASP 기준 unvisited node 수] {len(unvisited_grasp)}\n")
 
-    unvisited_linehaul = [i for i in unvisited_grasp if instance["node_types"][i] == 1]
-    unvisited_backhaul = [i for i in unvisited_grasp if instance["node_types"][i] == 2]
+    unvisited_linehaul = [i for i in unvisited_grasp if N[i] == 1]
+    unvisited_backhaul = [i for i in unvisited_grasp if N[i] == 2]
 
     print(f"  - linehaul: {len(unvisited_linehaul)}개")
     print(f"  - backhaul: {len(unvisited_backhaul)}개\n")
 
-    route_set = generate_grasp_routes(instance, alpha=0.3)
-    # max_iter = 50
-    improved_routes = tabu_search(instance, route_set, max_iter=50, tabu_tenure=9)
+    improved_routes = tabu_search(N, node_type, node_demand, capa, dist_mat, route_set, max_iter=100, tabu_tenure=13)
 
     print("[Local Search 이후 개선된 경로]")
     total_local_distance = 0
     for idx, route in enumerate(improved_routes):
         print(f"차량 {idx+1}: {route}")
-        d = route_distance(route, dist)
+        d = route_distance(route, dist_mat)
         print(f"  -> 경로 {idx+1} 거리: {d:.2f}")
-        type_list = [0 if i == 0 else instance["node_types"][i] for i in route]
+        type_list = [0 if i == 0 else node_type[i] for i in route]
         print(f"  -> 노드 유형: {type_list}")
         total_local_distance += d
     print(f"[총 이동 거리 (Local Search)] {total_local_distance:.2f}")
@@ -454,17 +448,17 @@ if __name__ == '__main__':
     visited_local = set()
     for route in improved_routes:
         visited_local.update(route)
-    unvisited_local = [i for i in range(instance["N"]) if i != 0 and i not in visited_local]
+    unvisited_local = [i for i in range(N) if i != 0 and i not in visited_local]
     print(f"[Local Search 기준 unvisited node 수] {len(unvisited_local)}")
 
-    unvisited_linehaul = [i for i in unvisited_local if instance["node_types"][i] == 1]
-    unvisited_backhaul = [i for i in unvisited_local if instance["node_types"][i] == 2]
+    unvisited_linehaul = [i for i in unvisited_local if node_type[i] == 1]
+    unvisited_backhaul = [i for i in unvisited_local if node_type[i] == 2]
 
     print(f"  - linehaul: {len(unvisited_linehaul)}개")
     print(f"  - backhaul: {len(unvisited_backhaul)}개")
 
-    plot_routes(instance, improved_routes)
-    check_capacity_violation(instance, improved_routes)
+    plot_routes(problem_info, improved_routes)
+    check_capacity_violation(node_type, node_demand, capa, improved_routes)
 
     print("\n[전체 경로 리스트]")
     print("[", end="")
