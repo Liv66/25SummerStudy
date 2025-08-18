@@ -114,7 +114,7 @@ def alns_vrpb(
         capa: int,
         depot_idx: int,
         max_vehicles: int,
-        time_limit: float = 55.0,
+        deadline: float,  # time_limit 대신 deadline을 받음
         verbose: bool = False,  # 로그 제어 매개변수 추가
 ) -> tuple[list[list[int]], float]:
 
@@ -529,14 +529,14 @@ def alns_vrpb(
         unassigned.clear()
         return partial_routes
 
-    def intensive_local_search(routes, start_time, time_limit):
+    def intensive_local_search(routes, deadline):
         """집중적인 지역 탐색 (시간 제한 인지)"""
         improved = True
         search_count = 0
 
         while improved and search_count < 5:
-            # 🛡️ 여기서 전체 시간 제한을 확인하고, 넘었으면 즉시 중단
-            if time.time() - start_time >= time_limit:
+            # 🛡️ 데드라인을 직접 확인
+            if time.time() >= deadline:
                 break
 
             improved = False
@@ -745,7 +745,6 @@ def alns_vrpb(
     best_cost = calculate_total_cost(best_routes)
     cur_routes = [r[:] for r in best_routes]
     cur_cost = best_cost
-    unassigned_nodes = []
 
     destroy_ops = [random_removal, shaw_removal, worst_removal, route_removal]
     repair_ops = [cluster_aware_greedy_insert, regret_k_insert]
@@ -761,20 +760,25 @@ def alns_vrpb(
     T = best_cost * 0.1  # 낮은 초기 온도
     T_min, T_max = 0.01, best_cost * 0.3
     target_accept = 0.15  # 낮은 수용률
-    accepted, attempted = 0, 0
-    iteration = 0
-    start = time.time()
-    last_improvement = 0
-
     log(f"[INFO] Initial solution: cost={best_cost:.1f}, routes={len(best_routes)}")
 
-    while time.time() - start < time_limit:
-        iteration += 1
-        elapsed = time.time() - start
+    # 변수 초기화는 while 문 이전에 한 번만 수행
+    unassigned_nodes = []
+    iteration = 0
+    start_time_for_log = time.time()
+    last_improvement = 0
+    accepted, attempted = 0, 0
 
-        # 집중적 지역 탐색 (더 자주 수행)
+    # ★★★ 3. 메인 루프 조건을 deadline 기준으로 변경 ★★★
+    while time.time() < deadline:
+        unassigned_nodes.clear()
+        iteration += 1
+        elapsed = time.time() - start_time_for_log
+
+        # 집중적 지역 탐색 호출 시 deadline 전달
         if iteration % 20 == 0:
-            if intensive_local_search(cur_routes, start, time_limit):
+            # ★★★ 4. local_search 호출 시 deadline 전달 ★★★
+            if intensive_local_search(cur_routes, deadline):
                 new_cost = calculate_total_cost(cur_routes)
                 if new_cost < cur_cost:
                     cur_cost = new_cost
@@ -796,7 +800,11 @@ def alns_vrpb(
             else:
                 r_idx = roulette_select(r_weights)
 
-            temp_routes = destroy_ops[d_idx](cur_routes, unassigned_nodes, iteration)
+            unassigned_nodes.clear()
+            # ★★★★★ 핵심 수정 사항 ★★★★★
+            # destroy 연산을 시작하기 전에 cur_routes의 '깊은 복사본'을 만들어서 전달합니다.
+            # 이렇게 하면 원본 cur_routes가 오염되는 것을 완벽하게 막을 수 있습니다.
+            temp_routes = destroy_ops[d_idx]([r[:] for r in cur_routes], unassigned_nodes, iteration)
 
             if repair_ops[r_idx] == regret_k_insert:
                 temp_routes = repair_ops[r_idx](unassigned_nodes, temp_routes, k=3)
@@ -867,7 +875,8 @@ def alns_vrpb(
 
     # 최종 집중적 지역 탐색
     log("[INFO] Final intensive local search...")
-    final_improved = intensive_local_search(best_routes, start, time_limit)
+    # ★★★ 5. 최종 local_search 호출 시에도 deadline 전달 ★★★
+    final_improved = intensive_local_search(best_routes, deadline)
     if final_improved:
         final_cost = calculate_total_cost(best_routes)
         if final_cost < best_cost:

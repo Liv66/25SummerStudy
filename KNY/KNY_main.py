@@ -10,7 +10,11 @@ import numpy as np
 
 # util.py와 KNY_alns.py는 동일한 폴더에 있다고 가정합니다.
 from util import get_distance, plot_vrpb, check_feasible
-from KNY_alns import alns_vrpb
+try:
+    from .KNY_alns import alns_vrpb
+except ImportError:
+    from KNY_alns import alns_vrpb
+
 
 # 로깅 설정은 코드 맨 아래 __main__ 블록에서 최종적으로 제어합니다.
 ENABLE_LOGGING = False
@@ -128,7 +132,7 @@ def improved_initial_solution(delivery_idx: List[int], pickup_idx: List[int], de
 
 
 def improved_greedy_vrpb(delivery_idx, pickup_idx, demands, capa, dist, depot_idx, node_types, K):
-    log_print("[INFO] 개선된 Greedy VRPB 초기화…")
+    #log_print("[INFO] 개선된 Greedy VRPB 초기화…")
     if 'cache' in globals() and cache: cache.clear_cache()
     routes = improved_initial_solution(delivery_idx, pickup_idx, demands, capa, dist, depot_idx, node_types, K)
     for p in pickup_idx:
@@ -136,14 +140,19 @@ def improved_greedy_vrpb(delivery_idx, pickup_idx, demands, capa, dist, depot_id
         ridx, pos, _ = find_best_insertion_fast(p, routes, node_types, demands, capa, dist, depot_idx)
         if ridx is not None:
             routes[ridx].insert(pos, p)
-        elif len(routes) < K:
-            routes.append([depot_idx, p, depot_idx])
-        else:
-            best_r = max(routes, key=lambda r: sum(demands[v] for v in r[1:-1] if node_types[v] == 1) - sum(
-                demands[v] for v in r[1:-1] if node_types[v] == 0))
-            best_r.insert(
-                max((i for i, v in enumerate(best_r) if v != depot_idx and node_types[v] == 1), default=0) + 1, p)
-    log_print(f"[INFO] 개선된 Greedy 완료 · Route 수 = {len(routes)} (K={K})")
+        else:  # 삽입 실패 시, 남는 차량 여부와 관계없이 무조건 강제 삽입
+            if len(routes) > 0:  # 경로가 하나라도 있을 경우
+                # 가장 여유 있는 루트에 강제 삽입
+                best_r = max(
+                    routes,
+                    key=lambda r: sum(demands[v] for v in r[1:-1] if node_types[v] == 1)
+                                  - sum(demands[v] for v in r[1:-1] if node_types[v] == 0),
+                )
+                last_deliv = max((i for i, v in enumerate(best_r) if v != depot_idx and node_types[v] == 1), default=0)
+                best_r.insert(last_deliv + 1, p)
+            elif len(routes) < K:  # 경로가 하나도 없는 예외적인 경우에만 새 경로 생성 (안전장치)
+                routes.append([depot_idx, p, depot_idx])  # 사실상 이 경우는 거의 발생하지 않음
+    #log_print(f"[INFO] 개선된 Greedy 완료 · Route 수 = {len(routes)} (K={K})")
     return routes
 
 
@@ -167,9 +176,13 @@ def to_kjh_types(node_types_internal): return [0 if i == 0 else 1 if t == 1 else
                                                enumerate(node_types_internal)]
 
 
-def cross_route_2opt_star(routes, dist, node_types, demands, capa, depot_idx):
+def cross_route_2opt_star(routes, dist, node_types, demands, capa, depot_idx, deadline: float):
     changed = True
     while changed:
+        # ★★★ 데드라인 체크 로직 추가 ★★★
+        if time.time() >= deadline: # <--- 이제 deadline이 무엇인지 알 수 있음
+            log_print("[WARN] cross_route_2opt_star: 시간이 부족하여 중단합니다.")
+            break
         changed = False
         for i in range(len(routes)):
             for j in range(i + 1, len(routes)):
@@ -230,8 +243,15 @@ def log_raw_result(filepath, result_data):
 # ─────────────────────────────────────────────────────────────
 # 7) 메인 드라이버
 # ─────────────────────────────────────────────────────────────
-def KJH_main(problem_info: dict):
+### ★ 1. 함수 이름 변경 ###
+# ─────────────────────────────────────────────────────────────
+def KNY_run(problem_info: dict, time_limit: int = 60):
     global cache, ENABLE_LOGGING
+    # ★★★ 1. 중앙 집중식 데드라인 설정 ★★★
+    t0 = time.time()
+    # 전체 파이프라인의 최종 데드라인 (최후의 안전망)
+    global_deadline = t0 + time_limit - 0.2
+
     K = problem_info["K"]
     (delivery_idx, pickup_idx, demands, capa, dist, depot_idx, node_types, coords) = convert_kjh_problem(problem_info)
     cache = DistanceCache(dist)
@@ -239,24 +259,61 @@ def KJH_main(problem_info: dict):
     init_start = time.time()
     init_routes = improved_greedy_vrpb(delivery_idx, pickup_idx, demands, capa, dist, depot_idx, node_types, K)
     init_elapsed = time.time() - init_start
+    #log_print(f"[INFO] 초기 해 생성 완료: {init_elapsed:.2f}초")
 
+    # ★★★★★ 동적 시간 할당 로직 ★★★★★
+    # 1. ALNS에 할당하고 싶은 목표 시간
+    desired_alns_duration = 57.0
+
+    # 2. 후처리 및 최종 검증을 위해 남겨둬야 할 최소 시간 (버퍼)
+    POST_PROC_BUDGET = 1.0
+
+    # 3. ALNS가 반드시 끝나야 하는 절대 시각 (전체 데드라인 기준)
+    alns_must_finish_by = global_deadline - POST_PROC_BUDGET
+
+    # 4. 현재 시간 기준으로 ALNS에 할당 가능한 최대 시간
+    time_available = alns_must_finish_by - time.time()
+
+    # 5. 원하는 시간(57초)과 할당 가능한 시간 중 더 '짧은' 시간을 실제 실행 시간으로 결정
+    alns_run_duration = max(0, min(desired_alns_duration, time_available))
+
+    # 6. ALNS만을 위한 데드라인 계산
+    alns_deadline = time.time() + alns_run_duration
+
+    #log_print(f"[INFO] ALNS 할당 시간: {alns_run_duration:.2f}초")
     alns_start = time.time()
-    best_routes, _ = alns_vrpb(init_routes, dist, node_types, demands, capa, depot_idx, max_vehicles=K, time_limit=57)
+
+    best_routes, _ = alns_vrpb(init_routes, dist, node_types, demands, capa, depot_idx, max_vehicles=K,
+                               deadline=alns_deadline)
     alns_elapsed = time.time() - alns_start
 
-    post_proc_start = time.time()
-    best_routes = cross_route_2opt_star(best_routes, dist, node_types, demands, capa, depot_idx)
-    post_proc_elapsed = time.time() - post_proc_start
+    # 후처리는 전체 데드라인(global_deadline)을 기준으로 판단
+    if global_deadline - time.time() > 0.5:
+        #log_print(f"[INFO] 남은 시간: {global_deadline - time.time():.2f}초. 후처리를 시작합니다.")
+        best_routes = cross_route_2opt_star(best_routes, dist, node_types, demands, capa, depot_idx,
+                                            deadline=global_deadline)
+    else:
+        log_print("[WARN] 시간이 부족하여 후처리(cross_route_2opt_star)를 건너뜁니다.")
+
+    total_elapsed = time.time() - t0
+
+    problem_info_for_check = problem_info.copy()
+    problem_info_for_check["node_types"] = to_kjh_types(node_types)
+
+    obj = check_feasible(problem_info_for_check, best_routes, total_elapsed, timelimit=time_limit)
 
     if ENABLE_LOGGING:
-        total_elapsed = init_elapsed + alns_elapsed + post_proc_elapsed
-        log_print(f"[⏱️] 총 실행 시간: {total_elapsed:.2f}초")
+        log_print(f"[⏱️] 총 실행 시간: {total_elapsed:.2f}초 (전체 제한: {time_limit}초)")
+        if obj:
+            log_print(f"[✅] check_feasible 통과! 최종 목적 함수 값 = {obj:.2f}")
+        else:
+            log_print("[❌] check_feasible 실패.")
+        # CSV 저장을 위한 통계 계산 및 파일 쓰기
         final_stats = get_solution_stats(best_routes, dist, demands, capa, node_types)
 
         experiment_notes = {'수정한 부분': '없음'}
         log_print(f"[🔬] 이번 실행 내용: {experiment_notes['수정한 부분']}")
 
-        ### ★ 2. 원본 코드의 열 순서와 완전히 동일하게 log_data 생성 ###
         log_data = {
             'instance': problem_info.get('instance_name', 'unknown'),
             'obj': final_stats['obj'],
@@ -286,22 +343,44 @@ def KJH_main(problem_info: dict):
 # 8) 프로그램 실행 부분
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    # True로 설정하면 KNY_run 내부의 CSV 저장 로직이 자동으로 작동합니다.
     ENABLE_LOGGING = False
+
+    N_list = [50, 70, 100, 130, 150]
+    line_p_list = [0.5, 0.7, 0.85]
+
+    # instances 폴더 경로 설정
     try:
         ROOT = Path(__file__).resolve().parents[1]
-        instance_path = ROOT / "instances" / "problem_20_0.7.json"
+        instances_dir = ROOT / "instances"
     except IndexError:
-        instance_path = Path("./instances/problem_20_0.7.json")
+        instances_dir = Path("./instances")
 
-    try:
-        with open(instance_path, "r", encoding="utf-8") as f:
-            problem_data = json.load(f)
-        problem_data['instance_name'] = instance_path.stem
-    except FileNotFoundError:
-        print(f"[오류] 문제 파일을 찾을 수 없습니다: {instance_path}")
-        problem_data = None
+    # 모든 인스턴스 순회 실행
+    for N in N_list:
+        for line_p in line_p_list:
+            title = f"problem_{N}_{line_p}"
+            instance_path = instances_dir / f"{title}.json"
+            time_limit = 60
 
-    if problem_data:
-        solution = KJH_main(problem_data)
-        for route in solution:
-            print(route)
+            # --- 각 인스턴스 실행 전, 구분을 위한 제목 출력 ---
+            print(f"--- Starting instance: {title} ---")
+
+            # 인스턴스 파일 로드
+            try:
+                with open(instance_path, "r", encoding='utf-8') as f:
+                    problem_info = json.load(f)
+                problem_info['instance_name'] = instance_path.stem
+            except FileNotFoundError:
+                print(f"ERROR: Cannot find instance file -> {instance_path}")
+                print("--- Skipping to next instance ---")
+                continue  # 다음 인스턴스로 넘어감
+
+            # KNY_run 함수 실행
+            solution = KNY_run(problem_info, time_limit)
+
+            # --- 해답(이중 리스트)을 기존과 동일한 형식으로 출력 ---
+            for route in solution:
+                print(route)
+
+    print("--- All instances finished ---")

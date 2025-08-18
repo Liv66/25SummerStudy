@@ -3,7 +3,7 @@ import random
 
 from KJH.KJH_main import KJH_run
 from util import *
-
+from KNY.KNY_main import KNY_run
 
 def instance_generator(problem, N=50, capa=3000, line_p=0.7):
     # 인덱스 0은 depot
@@ -56,7 +56,7 @@ def main():
                     problem_info = json.load(f)
             print("------------------------")
             start = time.time()
-            sol = KJH_run(problem_info, time_limit)
+            sol = KNY_run(problem_info, time_limit)
             elapsed = round(time.time() - start, 2)
 
             obj = check_feasible(problem_info, sol, elapsed, time_limit)

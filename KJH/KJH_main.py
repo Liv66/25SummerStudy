@@ -3,7 +3,7 @@ import time
 from KJH.ILSRVND import *
 from KJH.KJH_vrpb import *
 from KJH.optimizer import solv_SC
-
+from pathlib import Path
 from util import plot_cvrp
 
 def KJH_run(problem_info, time_limit=60):
