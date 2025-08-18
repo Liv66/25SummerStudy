@@ -1,4 +1,4 @@
-# Set Partitioning
+# Set Partitioning(SP)
 from gurobipy import Model, GRB, quicksum
 from typing import List, Dict
 from HSH.HSH_GeneratePool import run_pooling_loop

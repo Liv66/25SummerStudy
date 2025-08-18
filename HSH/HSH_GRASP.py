@@ -1,4 +1,4 @@
-# GRASP
+# GRASP 실행
 import random
 from typing import List, Dict
 import matplotlib.pyplot as plt

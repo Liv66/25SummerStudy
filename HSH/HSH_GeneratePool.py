@@ -1,4 +1,4 @@
-# GeneratePool - Pool 생성, 관리
+# GeneratePool - Pool 생성 및 관리
 import random, time, json
 from typing import List, Dict
 
@@ -63,7 +63,7 @@ class SolPool:
 def run_pooling_loop(N, K, node_type, node_demand, capa, dist_mat) -> List[List[int]]:
     depot = 0
     sp = SolPool(N=N)
-    duration_seconds = int(50)
+    duration_seconds = int(55)
 
     t0 = time.time()
     while time.time() - t0 < duration_seconds:

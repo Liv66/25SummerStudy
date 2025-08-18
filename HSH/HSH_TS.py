@@ -1,4 +1,4 @@
-# Tabu Search
+# Tabu Search(TS)
 from typing import List, Dict
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
