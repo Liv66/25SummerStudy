@@ -3,7 +3,11 @@ import numpy
 <<<<<<< HEAD
 from OSM.OSM_util import get_distance, two_opt
 =======
+<<<<<<< HEAD
 >>>>>>> origin/OSM
+=======
+>>>>>>> OSM
+>>>>>>> main
 import time
 from OSM_util import two_opt
 

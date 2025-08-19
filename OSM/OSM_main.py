@@ -12,7 +12,11 @@ import numpy
 =======
 from OSM_ACO import ACO_VRPB
 from OSM_util import check_feasible, plot_cvrp
+<<<<<<< HEAD
 >>>>>>> origin/OSM
+=======
+>>>>>>> OSM
+>>>>>>> main
 
 def OSM_run(problem_info, time_limit=57, plot=False, log=True):
 
@@ -196,7 +200,11 @@ def run_single_experiment(aco_class, problem_data):
     capa = problem_data['capa']
     all_node_coord = problem_data['node_coords']
 =======
+<<<<<<< HEAD
 >>>>>>> origin/OSM
+=======
+>>>>>>> OSM
+>>>>>>> main
     demands = []
     for i, node_type_val in enumerate(node_types_list):
         demand_value = node_demands_list[i]
@@ -233,7 +241,11 @@ def run_single_experiment(aco_class, problem_data):
     if final_solution and final_solution[1] != float('inf'):
         solution_routes = final_solution[0] # Depot이 포함된 경로
         elapsed_time = time.time() - start
+<<<<<<< HEAD
 >>>>>>> origin/OSM
+=======
+>>>>>>> OSM
+>>>>>>> main
 
         final_cost = check_feasible(problem_info=problem_info, sol=solution_routes, elapsed=elapsed_time, timelimit=time_limit)
 
@@ -356,4 +368,8 @@ if __name__ == "__main__":
     with open(file_path, 'r') as f:
         problem_info = json.load(f)
     OSM_run(problem_info)
+<<<<<<< HEAD
 >>>>>>> origin/OSM
+=======
+>>>>>>> OSM
+>>>>>>> main
