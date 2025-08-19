@@ -2,6 +2,7 @@ from math import sqrt
 import matplotlib.pyplot as plt
 from ortools.sat.python import cp_model
 
+
 def two_opt(nodes, dist_matrix):
     """
     주어진 노드 리스트(경로)를 2-opt 알고리즘으로 최적화합니다.
@@ -13,15 +14,17 @@ def two_opt(nodes, dist_matrix):
         improved = False
         for i in range(1, len(result_route) - 2):
             for j in range(i + 1, len(result_route) - 1):
-                original_dist = dist_matrix[result_route[i-1]][result_route[i]] + dist_matrix[result_route[j]][result_route[j+1]]
-                new_dist = dist_matrix[result_route[i-1]][result_route[j]] + dist_matrix[result_route[i]][result_route[j+1]]
+                original_dist = dist_matrix[result_route[i - 1]][result_route[i]] + dist_matrix[result_route[j]][
+                    result_route[j + 1]]
+                new_dist = dist_matrix[result_route[i - 1]][result_route[j]] + dist_matrix[result_route[i]][
+                    result_route[j + 1]]
                 if new_dist < original_dist:
-                    result_route = result_route[:i] + result_route[i:j+1][::-1] + result_route[j+1:]
+                    result_route = result_route[:i] + result_route[i:j + 1][::-1] + result_route[j + 1:]
                     improved = True
-    
+
     final_cost = sum(dist_matrix[result_route[i]][result_route[i + 1]] for i in range(len(result_route) - 1))
     return final_cost, result_route
-    
+
 
 def get_distance(nodes_coord):
     N = len(nodes_coord)
@@ -35,17 +38,19 @@ def plot_cvrp(nodes_coord, best_result_route, title='', demands=None):
     """CVRP 결과를 시각화합니다."""
     plt.figure(figsize=(12, 8))
     depot_coord = nodes_coord[0]
-    
+
     # 노드 종류별 마커 표시
     plt.scatter(depot_coord[0], depot_coord[1], c='black', marker='s', s=150, label='Depot', zorder=3)
     if demands:
         for i, coord in enumerate(nodes_coord):
             if i == 0: continue
             if demands[i] > 0:
-                plt.scatter(coord[0], coord[1], c='green', s=60, label='Linehaul' if i==1 else "", zorder=2)
+                plt.scatter(coord[0], coord[1], c='green', s=60, label='Linehaul' if i == 1 else "", zorder=2)
             elif demands[i] < 0:
-                plt.scatter(coord[0], coord[1], c='blue', s=60, label='Backhaul' if demands.count(min(demands))==1 and demands[i]==min(demands) else "", zorder=2)
-    
+                plt.scatter(coord[0], coord[1], c='blue', s=60,
+                            label='Backhaul' if demands.count(min(demands)) == 1 and demands[i] == min(demands) else "",
+                            zorder=2)
+
     # 차량별 경로 그리기
     color_list = ['red', 'orange', 'purple', 'brown', 'cyan', 'magenta', 'olive', 'pink', 'gray', 'gold']
     for i, route in enumerate(best_result_route):
@@ -53,7 +58,8 @@ def plot_cvrp(nodes_coord, best_result_route, title='', demands=None):
         full_route = [0] + route + [0]
         route_coords_x = [nodes_coord[node_idx][0] for node_idx in full_route]
         route_coords_y = [nodes_coord[node_idx][1] for node_idx in full_route]
-        plt.plot(route_coords_x, route_coords_y, color=color, linewidth=1.5, marker='o', markersize=4, label=f'Vehicle {i+1}')
+        plt.plot(route_coords_x, route_coords_y, color=color, linewidth=1.5, marker='o', markersize=4,
+                 label=f'Vehicle {i + 1}')
 
     plt.xlabel("X Coordinate")
     plt.ylabel("Y Coordinate")
@@ -61,7 +67,8 @@ def plot_cvrp(nodes_coord, best_result_route, title='', demands=None):
     plt.grid(True)
     plt.legend()
     plt.show()
-    
+
+
 def check_feasible(problem_info, sol, elapsed, timelimit):
     K = problem_info['K']
     node_type = problem_info['node_types']
