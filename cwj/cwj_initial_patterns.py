@@ -1,65 +1,138 @@
+from typing import List, Tuple, Dict
+import math
 import random
-from cwj_pricing_problem import labeling_algorithm
+from cwj_utils import *
 
-def generate_initial_patterns(K, Q, node_types, node_demands, dist_mat):
+# -----------------------------
+# Initial Pattern Generation
+# -----------------------------
+def generate_initial_patterns(K: int, Q: int, node_types: List[int], node_demands: List[int],
+                              dist_mat: List[List[float]], seed: int = 0) -> List[Tuple[List[int], float]]:
     """
-    linehaul 여러 개 + backhaul 조합 기반으로 feasible route 생성
-    - 중복 경로 제거 (순서 동일)
-    - 노드 집합 동일한 경로 중 최소 비용만 유지
+    Build a covering set of feasible routes:
+    1) Pack Ls greedily (<=Q) from depot by nearest-neighbor.
+    2) After last L, greedily add Bs (<=Q).
+    Ensures all customers (L and B) are covered at least once by creating extra routes as needed.
     """
-    depot = 0
+    random.seed(seed)
     N = len(node_types)
-    linehauls = [i for i in range(1, N) if node_types[i] == 1]
-    backhauls = [i for i in range(1, N) if node_types[i] == 2]
+    Ls = [i for i in range(1, N) if node_types[i] == 1]
+    Bs = [i for i in range(1, N) if node_types[i] == 2]
 
-    best_by_node_set = dict()       # key: frozenset(route[1:-1]), value: (route, cost)
-    unique_route_set = set()        # key: tuple(route)
+    unL = set(Ls)
+    unB = set(Bs)
+    routes: List[List[int]] = []
 
-    tried = set()
-    pivot_candidates = random.sample(linehauls, min(K * 2, len(linehauls)))
-
-    for pivot in pivot_candidates:
-        if pivot in tried:
-            continue
-        tried.add(pivot)
-
-        # 수요 기준 가까운 linehaul 최대 3개 선택
-        lh_subset = []
-        demand_sum = 0
-        for lh in sorted(linehauls, key=lambda x: dist_mat[pivot][x]):
-            if lh in lh_subset:
-                continue
-            if demand_sum + node_demands[lh] > Q:
+    # Phase A: create routes centered on linehauls
+    while unL:
+        # pivot: pick L closest to depot or random among k-best
+        k_best = sorted(unL, key=lambda i: dist_mat[0][i])[:min(5, len(unL))]
+        pivot = random.choice(k_best)
+        # build L cluster
+        L_pack = [pivot]
+        capL = node_demands[pivot]
+        cur = pivot
+        cand = list(unL - {pivot})
+        while cand:
+            # pick nearest L that fits
+            cand.sort(key=lambda j: dist_mat[cur][j])
+            chosen = None
+            for j in cand:
+                if capL + node_demands[j] <= Q:
+                    chosen = j
+                    break
+            if chosen is None:
                 break
-            lh_subset.append(lh)
-            demand_sum += node_demands[lh]
+            L_pack.append(chosen)
+            capL += node_demands[chosen]
+            cur = chosen
+            cand.remove(chosen)
+        # order Ls NN from depot
+        L_seq = nearest_neighbor_order(L_pack, 0, dist_mat)
 
-        # backhaul 필터링
-        b_subset = [b for b in backhauls if node_demands[b] <= Q - demand_sum]
+        # Phase B: add Bs greedily from last L
+        capB = 0
+        cur = L_seq[-1]
+        B_seq: List[int] = []
+        # try to favor Bs near the L cluster tail
+        candB = list(unB)
+        while candB:
+            candB.sort(key=lambda j: dist_mat[cur][j])
+            added = False
+            for j in candB:
+                if capB + node_demands[j] <= Q:
+                    B_seq.append(j)
+                    capB += node_demands[j]
+                    cur = j
+                    candB.remove(j)
+                    added = True
+                    break
+            if not added:
+                break
 
-        routes = labeling_algorithm(lh_subset, b_subset, dist_mat, node_demands, node_types, Q)
+        route = [0] + L_seq + B_seq + [0]
+        if is_feasible_vrpb(route, node_types, node_demands, Q):
+            routes.append(route)
+            for i in L_seq:
+                unL.discard(i)
+            for j in B_seq:
+                unB.discard(j)
+        else:
+            # fallback minimal L-only route
+            route = [0] + L_seq + [0]
+            if is_feasible_vrpb(route, node_types, node_demands, Q):
+                routes.append(route)
+                for i in L_seq:
+                    unL.discard(i)
 
-        for route, cost in routes:
-            route_tuple = tuple(route)
-            node_set = frozenset(route[1:-1])
+    # Phase C: cover remaining Bs by pairing with small L packs
+    # Find small Ls near each remaining B
+    for b in list(unB):
+        # choose small L set (nearest few) that fits and makes a feasible route
+        nearLs = sorted([i for i in range(1, N) if node_types[i] == 1],
+                        key=lambda i: dist_mat[b][i])[:5]
+        built = False
+        for l in nearLs:
+            if node_demands[l] <= Q and node_demands[b] <= Q:
+                route = [0, l, b, 0]
+                if is_feasible_vrpb(route, node_types, node_demands, Q):
+                    routes.append(route)
+                    unB.discard(b)
+                    built = True
+                    break
+        if not built:
+            # last resort: attach b to the closest existing route that has B capacity
+            best_idx = None
+            best_increase = math.inf
+            for idx, r in enumerate(routes):
+                # compute current B load
+                curB = sum(node_demands[v] for v in r if node_types[v] == 2)
+                if curB + node_demands[b] <= Q and node_types[r[-2]] == 2:
+                    # try insert before depot
+                    increase = dist_mat[r[-2]][b] + dist_mat[b][0] - dist_mat[r[-2]][0]
+                    if increase < best_increase:
+                        best_increase = increase
+                        best_idx = idx
+            if best_idx is not None:
+                routes[best_idx].insert(-1, b)
+                unB.discard(b)
+            else:
+                # as a final fallback, create [0, l*, b, 0] with l* closest to depot that fits
+                lstar = min([i for i in range(1, N) if node_types[i] == 1],
+                            key=lambda i: dist_mat[0][i])
+                route = [0, lstar, b, 0]
+                if is_feasible_vrpb(route, node_types, node_demands, Q):
+                    routes.append(route)
+                    unB.discard(b)
 
-            if route_tuple in unique_route_set:
-                continue  # 순서까지 같은 route 중복 제거
-            unique_route_set.add(route_tuple)
+    # remove duplicates and keep least-cost route for identical node-sets
+    best_by_set: Dict[frozenset, Tuple[List[int], float]] = {}
+    for r in routes:
+        nodeset = frozenset(r[1:-1])
+        c = route_cost(r, dist_mat)
+        if nodeset not in best_by_set or c < best_by_set[nodeset][1]:
+            best_by_set[nodeset] = (r, c)
 
-            # 노드 집합이 같으면 더 나은 cost로 갱신
-            if node_set not in best_by_node_set or cost < best_by_node_set[node_set][1]:
-                best_by_node_set[node_set] = (route, cost)
-
-        print(f"[DEBUG] Found {len(routes)} routes for pivot {pivot} with lh_subset={lh_subset}")
-
-    route_pool = list(best_by_node_set.values())
-
-    print("[DEBUG] Total routes after filtering:", len(route_pool))
-    for r, _ in route_pool:
-        print(" - Route:", r)
-
-    if not route_pool:
-        print("[ERROR] 초기 route를 단 하나도 생성하지 못했습니다.")
-
+    route_pool = [(r, c) for (r, c) in best_by_set.values()]
+    route_pool.sort(key=lambda x: x[1])
     return route_pool
