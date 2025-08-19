@@ -76,12 +76,15 @@ class ALNS:
             destroy_idx, destroy_method = self.select_heuristic(self.destroy_methods, self.destroy_weights)
             repair_idx, repair_method = self.select_heuristic(self.repair_methods, self.repair_weights)
             
+
             # 2. 새로운 해 생성
             # num_to_remove 등 파라미터는 필요에 따라 조절 가능
+            perturbation = False
             if no_improve >= max_no_improvement:
                 num_node = len(self.nodes)
                 num_to_remove = random.randint(num_node//4, num_node//3)
                 no_improve = no_improve*0.8
+                perturbation = True
             else:
                 num_to_remove = random.randint(1, len(self.nodes)//10) 
 
@@ -118,7 +121,7 @@ class ALNS:
                 # 현재 해보다 좋은 해: 중간 점수
                 self.current_solution = new_solution
                 score = 2
-            elif temperature > 0 and math.exp((current_cost - new_cost) / temperature) > random.random():
+            elif temperature > 0 and math.exp((current_cost - new_cost) / temperature) > random.random() or perturbation:
                 # 더 나쁜 해지만 확률적으로 채택: 낮은 점수
                 self.current_solution = new_solution
                 score = 1

@@ -48,19 +48,19 @@ def Ock_main(problem_info, iterations=10000, start_temperature=1000, cooling_rat
 
     return best_routes, best_cost, elapsed_time, nodes, inverse_id_map
 
-if __name__ == "__main__":
+if __name__ != "__main__":
     # JSON 파일에서 문제 정보 로드
 
     search_pattern = os.path.join('instances', '*.json')
     problem_filepaths = glob.glob(search_pattern)
 
-    # prob_list = ['problem_20_0.7.json', 'problem_30_0.7.json', 'problem_100_0.7.json']
+    prob_list = ['problem_70_0.5.json', 'problem_70_0.7.json', 'problem_70_0.85.json']
     # prob_list = ['problem_100_0.7.json']
     results_folder = "results"
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
 
-    summary_filename = os.path.join(results_folder, "summary_of_all_results.jsonl")
+    summary_filename = os.path.join(results_folder, "summary_of_all_results2.jsonl")
     # 'w'(쓰기 모드)로 파일을 열어, 이전 실행 결과가 있다면 덮어쓰도록 함
     with open(summary_filename, 'w') as f:
         # 이 with 블록은 파일을 비우는 역할만 합니다.
@@ -159,3 +159,63 @@ if __name__ != "__main__":
     # 통계량 출력
     for value in range(2):  # 0: 비용, 1: 시간
         statistic_result(result, value)
+
+
+if __name__ == "__main__":
+    # 실험하고자 하는 문제 파일 목록
+    prob_list = ['problem_70_0.5.json', 'problem_70_0.7.json', 'problem_70_0.85.json']
+    
+    # 결과를 저장할 폴더 설정
+    results_folder = "results"
+    if not os.path.exists(results_folder):
+        os.makedirs(results_folder)
+
+    # 모든 결과를 요약하여 저장할 파일 이름 설정
+    summary_filename = os.path.join(results_folder, "summary_of_all_results2.jsonl")
+    
+    # 'w'(쓰기 모드)로 파일을 열어, 이전 실행 결과가 있다면 덮어쓰도록 함
+    with open(summary_filename, 'w') as f:
+        # 이 with 블록은 파일을 비우는 역할만 합니다.
+        pass
+
+    # prob_list에 지정된 각 문제에 대해 반복
+    for problem_name in prob_list:
+        # 'instances' 폴더 경로와 파일 이름을 조합하여 전체 파일 경로 생성
+        problem_filepath = os.path.join('instances', problem_name)
+        
+        # 각 문제에 대해 30번 반복 실험 수행
+        for run_number in range(30):
+            print(f"\n--- 문제 '{problem_name}' 처리 중 (실행 {run_number + 1}/30) ---")
+            problem_info = ic.load_from_json(problem_filepath)
+            
+            # Ock_main 함수 실행
+            sol, cost, epalsed_time, nodes, inverse_id_map = Ock_main(problem_info, iterations=1000000, start_temperature=1000, cooling_rate=0.99, max_no_improvement=1000)
+            
+            print(f"\n--- {problem_name} 최종 결과 ---")
+            print(f"총 실행 시간: {epalsed_time:.2f}초")
+            print(f"최종 비용: {cost:.2f}")
+            print(f"최적 경로: {sol}")
+
+            convert_solution = ic.convert_solution(sol, inverse_id_map)
+            result_entry = {
+                'problem_name': problem_filepath, # 기존 코드와 같이 전체 경로를 저장
+                'run_number': run_number + 1,      # 실행 횟수 기록
+                'final_cost': cost,
+                'elapsed_time': epalsed_time,
+                'solution_routes': convert_solution,  
+                'feasibility_check': True
+            }
+
+            if v.check_feasible(problem_info, convert_solution, epalsed_time, 60) == 0:
+                print(f"Validation failed for {problem_name} on run {run_number + 1}")
+                result_entry['feasibility_check'] = False
+
+            # 요약 파일에 결과 추가 (append 모드)
+            with open(summary_filename, 'a') as f:
+                # 딕셔너리를 JSON 문자열로 변환하여 파일에 쓴다
+                f.write(json.dumps(result_entry) + '\n')
+
+            # 경로 시각화 이미지 저장
+            base_name = problem_name.replace('.json', '')
+            output_filename = os.path.join(results_folder, f"solution_{base_name}_run{run_number + 1}.png")
+            draw_routes(nodes, sol, filename=output_filename)
