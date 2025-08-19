@@ -1,17 +1,14 @@
 import random
 import numpy
-<<<<<<< HEAD
-from OSM.OSM_util import get_distance, two_opt
-=======
->>>>>>> OSM
 import time
 from OSM_util import two_opt
+
 
 class ACO_VRPB:
     def __init__(self, alpha=1, beta=1.5, sigma=3, ro=0.8, th=80, iterations=200, ants=22, q0=0.9):
         self.alpha = alpha
         self.beta = beta
-        self.sigma = sigma 
+        self.sigma = sigma
         self.ro = ro
         self.th = th
         self.iterations = iterations
@@ -22,7 +19,7 @@ class ACO_VRPB:
         graph = {i: coord for i, coord in enumerate(node_coords)}
         demand_dict = {i: d for i, d in enumerate(demands)}
         all_nodes = list(graph.keys())
-        
+
         linehaul_nodes = [node for node in all_nodes if demand_dict.get(node, 0) > 0]
         backhaul_nodes = [node for node in all_nodes if demand_dict.get(node, 0) < 0]
 
@@ -36,9 +33,9 @@ class ACO_VRPB:
         for i in range(num_nodes):
             for j in range(i + 1, num_nodes):
                 edges[(i, j)] = dist_mat[i][j]
-        
+
         feromones = {k: 1.0 for k in edges.keys()}
-        
+
         return linehaul_nodes, backhaul_nodes, edges, capa, demand_dict, feromones
 
     def _calculate_probabilities(self, current_node, candidate_nodes, feromones, edges):
@@ -48,14 +45,15 @@ class ACO_VRPB:
             prob = (feromones.get(edge, 1.0) ** self.alpha) * \
                    ((1 / edges.get(edge, float('inf'))) ** self.beta)
             probs.append(prob)
-        
+
         sum_probs = numpy.sum(probs)
         if sum_probs == 0:
             return numpy.ones(len(candidate_nodes)) / len(candidate_nodes) if candidate_nodes else numpy.array([])
-        
+
         return numpy.array(probs) / sum_probs
 
-    def solution_one_ant_VRPB(self, K, all_linehaul, all_backhaul, edges, capacityLimit, demand, feromones, node_coords):
+    def solution_one_ant_VRPB(self, K, all_linehaul, all_backhaul, edges, capacityLimit, demand, feromones,
+                              node_coords):
         """
         K-vehicle 제약을 지키는 삽입 휴리스틱 기반 경로 생성
         """
@@ -72,15 +70,15 @@ class ACO_VRPB:
         if len(unvisited_customers) >= K:
             for i in range(K):
                 customer = unvisited_customers[i]
-                clusters[i].append(customer) # i번 차량에 i번 고객을 할당
+                clusters[i].append(customer)  # i번 차량에 i번 고객을 할당
                 last_nodes[i] = customer
-                
+
                 is_linehaul = demand[customer] > 0
                 if is_linehaul:
                     linehaul_loads[i] += demand[customer]
                 else:
                     backhaul_loads[i] += abs(demand[customer])
-            
+
             # 이미 할당된 처음 K명의 고객을 제외한 나머지 고객 목록
             remaining_customers = unvisited_customers[K:]
         else:
@@ -100,13 +98,13 @@ class ACO_VRPB:
                 else:
                     if backhaul_loads[i] + abs(demand[customer]) > capacityLimit:
                         continue
-                
+
                 cost = edges.get((min(last_nodes[i], customer), max(last_nodes[i], customer)), float('inf'))
 
                 if cost < min_insertion_cost:
                     min_insertion_cost = cost
                     best_vehicle_idx = i
-            
+
             if best_vehicle_idx != -1:
                 clusters[best_vehicle_idx].append(customer)
                 last_nodes[best_vehicle_idx] = customer
@@ -125,11 +123,11 @@ class ACO_VRPB:
             if not cluster_nodes:
                 solution.append([])
                 continue
-            
+
             # 배송/반송 노드 분리
             linehaul_part = [node for node in cluster_nodes if demand[node] > 0]
             backhaul_part = [node for node in cluster_nodes if demand[node] < 0]
-            
+
             # 각 파트 내에서 경로 생성 (ACO 확률 기반)
             path = []
             current_node = 0
@@ -139,14 +137,14 @@ class ACO_VRPB:
                 path.append(next_node)
                 linehaul_part.remove(next_node)
                 current_node = next_node
-                
+
             while backhaul_part:
                 probabilities = self._calculate_probabilities(current_node, backhaul_part, feromones, edges)
                 next_node = numpy.random.choice(backhaul_part, p=probabilities)
                 path.append(next_node)
                 backhaul_part.remove(next_node)
                 current_node = next_node
-                
+
             solution.append(path)
 
         return solution
@@ -177,9 +175,9 @@ class ACO_VRPB:
 
         Lavg = sum(s[1] for s in valid_solutions) / len(valid_solutions)
         feromones = {k: (self.ro + self.th / Lavg) * v for (k, v) in feromones.items()}
-        
+
         valid_solutions.sort(key=lambda x: x[1])
-        
+
         if bestSolution is None or bestSolution[1] == float('inf') or valid_solutions[0][1] < bestSolution[1]:
             bestSolution = valid_solutions[0]
 
@@ -193,7 +191,7 @@ class ACO_VRPB:
                     current_node = node
                 edge = (min(current_node, depot), max(current_node, depot))
                 if edge in feromones: feromones[edge] += self.sigma / bestSolution[1]
-        
+
         return bestSolution, feromones
 
     def perturb_solution(self, solution_routes, K, edges, demand_dict, capacity, dist_matrix):
@@ -234,19 +232,19 @@ class ACO_VRPB:
                     # --- 용량 확인 ---
                     if is_customer_linehaul:
                         if current_linehaul_load + demand_to_add > capacity:
-                            continue # 용량 초과 시 이 경로는 더 이상 고려하지 않음
+                            continue  # 용량 초과 시 이 경로는 더 이상 고려하지 않음
                     else:
                         if current_backhaul_load + abs(demand_to_add) > capacity:
-                            continue # 용량 초과
-                        
+                            continue  # 용량 초과
+
                     # --- 방문 순서 확인 ---
                     if is_customer_linehaul and pos > last_linehaul_idx + 1:
-                        continue # Linehaul 고객은 Linehaul 구간 뒤에 삽입될 수 없음
+                        continue  # Linehaul 고객은 Linehaul 구간 뒤에 삽입될 수 없음
                     if not is_customer_linehaul and pos <= last_linehaul_idx + 1:
-                        continue # Backhaul 고객은 Linehaul 구간에 삽입될 수 없음
+                        continue  # Backhaul 고객은 Linehaul 구간에 삽입될 수 없음
 
                     # 3. 제약조건을 통과한 경우에만 비용 계산
-                    prev_node = path[pos-1] if pos > 0 else 0
+                    prev_node = path[pos - 1] if pos > 0 else 0
                     next_node = path[pos] if pos < len(path) else 0
                     cost_increase = (edges.get((min(prev_node, customer), max(prev_node, customer)), float('inf')) +
                                      edges.get((min(customer, next_node), max(customer, next_node)), float('inf')) -
@@ -265,7 +263,8 @@ class ACO_VRPB:
 
     def solve(self, K, capa, node_coords, demands, dist_mat, start_time, time_limit, log=False):
         # 초기화
-        linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, node_coords, demands, dist_mat)
+        linehaul, backhaul, edges, capacity, demand_dict, feromones = self.initialize_aco_data(capa, node_coords,
+                                                                                               demands, dist_mat)
         bestSolution = None
         dist_matrix = dist_mat
 
@@ -284,10 +283,11 @@ class ACO_VRPB:
             solutions = []
 
             for _ in range(self.ants):
-                ant_solution = self.solution_one_ant_VRPB(K, linehaul, backhaul, edges, capacity, demand_dict, feromones, node_coords)
+                ant_solution = self.solution_one_ant_VRPB(K, linehaul, backhaul, edges, capacity, demand_dict,
+                                                          feromones, node_coords)
                 ant_distance = self.rate_solution(ant_solution, K, edges, demand_dict)
                 solutions.append((ant_solution, ant_distance))
-            
+
             bestSolution, feromones = self.update_feromone(feromones, solutions, bestSolution)
 
             if bestSolution and bestSolution[1] != float('inf'):
@@ -303,23 +303,23 @@ class ACO_VRPB:
 
                     if len(linehaul_part) > 1:
                         _, opt_lh_route = two_opt([0] + linehaul_part, dist_matrix)
-                        linehaul_part = opt_lh_route[1:] 
+                        linehaul_part = opt_lh_route[1:]
                     if len(backhaul_part) > 1:
                         start_node = linehaul_part[-1] if linehaul_part else 0
                         _, opt_bh_route = two_opt([start_node] + backhaul_part, dist_matrix)
-                        backhaul_part = opt_bh_route[1:] 
+                        backhaul_part = opt_bh_route[1:]
                     optimized_routes.append(linehaul_part + backhaul_part)
-                
+
                 optimized_distance = self.rate_solution(optimized_routes, K, edges, demand_dict)
                 if optimized_distance < bestSolution[1]:
-                    bestSolution = (optimized_routes, optimized_distance)            
+                    bestSolution = (optimized_routes, optimized_distance)
                     if log:
-                        print(f"Iteration {i+1}: 2-opt improved distance to {bestSolution[1]:.2f}")
+                        print(f"Iteration {i + 1}: 2-opt improved distance to {bestSolution[1]:.2f}")
 
             if bestSolution and bestSolution[1] < last_best_cost:
                 stac_count = 0  # 개선되었으므로 카운터 리셋
             else:
-                stac_count += 1 # 개선되지 않았으므로 카운터 증가
+                stac_count += 1  # 개선되지 않았으므로 카운터 증가
 
             # 정체 한계에 도달하면 '크게 흔들기' 실행
             if stac_count >= stac_limit:
@@ -347,10 +347,10 @@ class ACO_VRPB:
             # 반복마다 현재 최적 거리 출력
             if bestSolution and bestSolution[1] != float('inf'):
                 if log:
-                    print(f"Iteration {i+1}: Best Distance = {bestSolution[1]:.2f}")
+                    print(f"Iteration {i + 1}: Best Distance = {bestSolution[1]:.2f}")
             else:
                 if log:
-                    print(f"Iteration {i+1}: Finding valid solution...")
+                    print(f"Iteration {i + 1}: Finding valid solution...")
 
         # --- 루프 종료 후 최종 결과 반환 ---
         if bestSolution:
