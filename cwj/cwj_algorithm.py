@@ -3,10 +3,10 @@ import math
 import time
 import gurobipy as gp
 from gurobipy import GRB
-from cwj_utils import *
-from cwj_initial_patterns import *
-from cwj_rmp import *
-from cwj_pricing import *
+from .cwj_utils import *
+from .cwj_initial_patterns import *
+from .cwj_rmp import *
+from .cwj_pricing import *
 
 # -----------------------------
 # Strong Diving Heuristic
@@ -16,7 +16,7 @@ def strong_diving_with_residual_cg(
     route_pool: List[Tuple[List[int], float]],
     max_candidates: int = 6,
     res_max_iters: int = 10,
-    print_steps: bool = True
+    log_print: bool = False                     # 로그 확인
 ) -> List[Tuple[List[int], float]] | None:
     """
     Strong diving with residual CG + pool-restore:
@@ -111,11 +111,11 @@ def strong_diving_with_residual_cg(
         remaining = remaining_list(covered)
         if not remaining:
             total = sum(c for _, c in incumbent)
-            if print_steps:
+            if log_print:
                 print(f"[StrongDive] Feasible solution. Cost={int(total)}")
             return incumbent
         if K_rem <= 0:
-            if print_steps:
+            if log_print:
                 print("[StrongDive] Out of vehicles.")
             return None
 
@@ -124,7 +124,7 @@ def strong_diving_with_residual_cg(
         base_pool = pool_res
         lacking = lacking_customers(pool_res, remaining)
         if lacking:
-            if print_steps:
+            if log_print:
                 print(f"[StrongDive] Residual pool lacks {len(lacking)} customers → restore FULL pool for RLP.")
             base_pool = list(route_pool)
 
@@ -146,7 +146,7 @@ def strong_diving_with_residual_cg(
                 if added >= 10:
                     break
             if added == 0:
-                if print_steps:
+                if log_print:
                     print("[StrongDive] RLP infeasible and enrichment failed.")
                 return None
             # rebuild pools after enrichment
@@ -154,7 +154,7 @@ def strong_diving_with_residual_cg(
             base_pool = pool_res if not lacking_customers(pool_res, remaining) else list(route_pool)
             duals_base, mu_base, obj_base, base_pool = residual_cg_loop(base_pool, remaining, K_rem)
             if duals_base is None or obj_base == float('inf'):
-                if print_steps:
+                if log_print:
                     print("[StrongDive] RLP infeasible even after enrichment.")
                 return None
 
@@ -176,7 +176,7 @@ def strong_diving_with_residual_cg(
                 # 1에 가까운 순서 우선
                 vals.append((i, xi, abs(1.0 - xi)))
         if not vals:
-            if print_steps:
+            if log_print:
                 print("[StrongDive] No fractional columns to dive on.")
             return None
         # 상위 후보 추출
@@ -224,14 +224,14 @@ def strong_diving_with_residual_cg(
                 best_bundle = (route_cand, cost_cand, xi)
 
         if best_idx is None or best_bundle is None:
-            if print_steps:
+            if log_print:
                 print("[StrongDive] All candidate lookaheads infeasible.")
             return None
 
         # 5) 베스트 후보를 실제로 고정
         chosen_route, chosen_cost, chosen_val = best_bundle
         step += 1
-        if print_steps:
+        if log_print:
             print(f"[StrongDive] Step {step}: choose route with x={chosen_val:.6f} "
                   f"| cost={int(chosen_cost)} | route={chosen_route} | score={int(best_score) if math.isfinite(best_score) else 'inf'}")
 
@@ -289,7 +289,6 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
             if not any(S == frozenset(rr[0][1:-1]) for rr in route_pool):
                 route_pool.append((r, c))
                 added += 1
-        print(f"[CG] Iteration {it}: RMP obj={obj:.1f}, added={added}, pool={len(route_pool)}")
         if added == 0:
             break
 
@@ -354,7 +353,7 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
         problem_info, route_pool,
         max_candidates=10,     # 후보 개수
         res_max_iters=30,      # 잔여 CG 반복 수
-        print_steps=True
+        log_print= False       # 로그 출력
     )
 
     # ----- (A) strong diving 성공: incumbent 존재 → Sub-MIP 폴리싱 -----
@@ -363,7 +362,6 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
         remaining = 60.0 - elapsed
         if remaining <= 0:
             total = sum(c for _, c in dive_sol)
-            print(f"[TIMEOUT] Reached 60s before Sub-MIP. Return strong-diving incumbent. Cost={int(total)}")
             return dive_sol
 
         pool_sub = _build_sub_pool(route_pool, dive_sol, max_size=400)
@@ -372,16 +370,13 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
         elapsed2 = time.time() - t0
         if elapsed2 > 60.0:
             total = sum(c for _, c in dive_sol)
-            print(f"[TIMEOUT] Sub-MIP exceeded 60s. Return strong-diving incumbent. Cost={int(total)}")
             return dive_sol
 
         if sol_sub:
             total = sum(c for _, c in sol_sub)
-            print(f"[Sub-MIP] Polished solution within time. Cost={int(total)}")
             return sol_sub
         else:
             total = sum(c for _, c in dive_sol)
-            print(f"[Sub-MIP] No improvement found; return strong-diving incumbent. Cost={int(total)}")
             return dive_sol
 
     # ----- (B) strong diving 실패/중단 → 그래도 Sub-MIP 시도 (시간 제한 준수) -----

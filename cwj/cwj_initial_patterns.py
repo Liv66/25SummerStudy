@@ -1,7 +1,7 @@
 from typing import List, Tuple, Dict
 import math
 import random
-from cwj_utils import *
+from .cwj_utils import *
 
 # -----------------------------
 # Initial Pattern Generation

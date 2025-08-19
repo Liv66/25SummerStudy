@@ -1,7 +1,7 @@
-from cwj_utils import *
-from cwj_initial_patterns import *
 import gurobipy as gp
 from gurobipy import GRB
+from .cwj_utils import *
+from .cwj_initial_patterns import *
 
 # -----------------------------
 # Master Problem (RMP) with Gurobi
