@@ -3,6 +3,5 @@
 Minimize
  
 Subject To
+<<<<<<< HEAD
  visit_16: >= 1
-Bounds
-End

@@ -2,7 +2,7 @@ import json
 import time
 from cwj_algorithm import VRPB_CG_Heuristic
 
-def cwj_main(problem_info):
+def cwj_run(problem_info):
     K = problem_info['K']
     node_type = problem_info['node_types']
     node_demand = problem_info['node_demands']
@@ -32,7 +32,7 @@ if __name__ == '__main__':
         instance = json.load(f)
 
     start_time = time.time()
-    cwj_main(instance)
+    cwj_run(instance)
     end_time = time.time()
     elapsed = end_time - start_time
     print(f"\n실행 시간: {elapsed:.2f}초")

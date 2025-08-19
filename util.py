@@ -296,9 +296,9 @@ def check_feasible(problem_info, sol, elapsed, timelimit):
 
             if load > capa:
                 if flag:
-                    print(f"{idx}번째 차량의 line 용량 초과 {load}, {capa}")
-                else:
                     print(f"{idx}번째 차량의 back 용량 초과 {load}, {capa}")
+                else:
+                    print(f"{idx}번째 차량의 line 용량 초과 {load}, {capa}")
                 return 0
             pre = nxt
         cost += dist_mat[pre][0]
