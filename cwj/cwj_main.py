@@ -20,15 +20,50 @@ def cwj_run(problem_info):
     print("==========================================")
 
     solution = VRPB_CG_Heuristic(problem_info)
+    # ---- routes-only로 정규화 ----
+    routes_only = []
+    if solution is None:
+        print("[WARN] VRPB_CG_Heuristic returned None.")
+    elif isinstance(solution, dict):
+        # dict일 경우 흔한 키들 우선 탐색
+        for key in ("routes", "solution", "best_routes", "best_solution"):
+            if key in solution:
+                routes_only = solution[key]
+                break
+    elif isinstance(solution, (list, tuple)) and len(solution) > 0:
+        first = solution[0]
+        # [(route, cost), ...] 형태
+        if isinstance(first, (list, tuple)) and len(first) >= 2 \
+           and isinstance(first[0], (list, tuple)) and isinstance(first[1], (int, float)):
+            routes_only = [list(r) for (r, _) in solution]
+        # [[route], [route], ...] 형태
+        elif isinstance(first, (list, tuple)) and all(isinstance(x, int) for x in first):
+            routes_only = [list(r) for r in solution]
+        # 단일 route가 그대로 온 경우 [0, i, j, 0]
+        elif isinstance(first, int):
+            routes_only = [list(solution)]
+
+    # ---- 출력 (있으면) ----
     print("Final solution:")
     total_cost = 0
-    for route, cost in solution:
-        print(f"Route: {route} | Cost: {int(cost)}")
-        total_cost += cost
-    print(f"Total Cost: {int(total_cost)}")
+    if isinstance(solution, (list, tuple)) and len(solution) > 0 \
+       and isinstance(solution[0], (list, tuple)) and len(solution[0]) >= 2 \
+       and isinstance(solution[0][0], (list, tuple)) and isinstance(solution[0][1], (int, float)):
+        # (route, cost) 리스트일 때는 비용까지 출력
+        for route, cost in solution:
+            print(f"Route: {route} | Cost: {int(cost)}")
+            total_cost += cost
+        print(f"Total Cost: {int(total_cost)}")
+    else:
+        # 라우트만 있을 때는 라우트만 출력
+        for r in routes_only:
+            print(f"Route: {r}")
+
+    # check_feasible()와 호환되도록 "라우트 리스트" 반환
+    return routes_only
 
 if __name__ == '__main__':
-    with open('/Users/michael/Desktop/RiskLAB./Study/25SummerStudy/instances/problem_100_0.7.json', 'r') as f:
+    with open('/Users/michael/Desktop/RiskLAB./Study/25SummerStudy/instances/problem_20_0.7.json', 'r') as f:
         instance = json.load(f)
 
     start_time = time.time()
