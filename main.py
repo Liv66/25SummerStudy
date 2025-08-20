@@ -47,7 +47,7 @@ def main():
     # line_p_list = [0.5, 0.7, 0.85]
     capa = 3200
     N_list = [50]
-    line_p_list = [0.5]
+    line_p_list = [0.7]
     algorithms = [cwj_run, jhj_main, KJH_run, HSH_run, Ock_run, kny_run, OSM_run, PWB_run]
 
     for N in N_list:

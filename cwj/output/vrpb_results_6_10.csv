@@ -1,0 +1,46 @@
+instance,initial_rmp_lp_objval,total_cost,runtime_sec,status
+problem_100_0.5 2.json,572180,572180,19.994964,OK
+problem_100_0.5 3.json,572180,572180,20.117219,OK
+problem_100_0.5.json,572180,572180,19.462936,OK
+problem_100_0.7.json,813551,586069,22.710372,OK
+problem_100_0.85 2.json,633295,464111,29.756742,OK
+problem_100_0.85.json,633295,464111,29.725122,OK
+problem_130_0.5 2.json,709617,273088,51.970928,OK
+problem_130_0.5.json,709617,273088,49.792637,OK
+problem_130_0.7 2.json,,,60,TIMEOUT
+problem_130_0.7.json,,,60,TIMEOUT
+problem_130_0.85 2.json,,,60,TIMEOUT
+problem_130_0.85.json,,,60,TIMEOUT
+problem_150_0.5 2.json,740759,79984,25.545386,OK
+problem_150_0.5 3.json,740759,79984,27.24125,OK
+problem_150_0.5.json,740759,79984,28.279222,OK
+problem_150_0.7 2.json,728310,728310,37.972543,OK
+problem_150_0.7.json,728310,728310,35.531436,OK
+problem_150_0.85 2.json,716867,716867,32.677858,OK
+problem_150_0.85.json,716867,716867,32.459204,OK
+problem_200_0.7 2.json,,1236800,0.044102,OK
+problem_200_0.7.json,,1236800,0.044652,OK
+problem_20_0.7.json,223711,171524,0.426048,OK
+problem_220_0.7 2.json,,,60,TIMEOUT
+problem_220_0.7 3.json,,,60,TIMEOUT
+problem_220_0.7.json,,,60,TIMEOUT
+problem_30_0.7.json,288318,227696,1.10895,OK
+problem_40_0.6 2.json,329677,247063,3.257621,OK
+problem_40_0.6.json,329677,247063,2.979326,OK
+problem_500_0.7 2.json,,,60,TIMEOUT
+problem_500_0.7 3.json,,,60,TIMEOUT
+problem_500_0.7.json,,,60,TIMEOUT
+problem_50_0.5 2.json,459466,304305,6.63338,OK
+problem_50_0.5.json,459466,304305,6.531749,OK
+problem_50_0.7 2.json,387604,304939,6.459372,OK
+problem_50_0.7 3.json,387604,304939,6.472878,OK
+problem_50_0.7.json,387604,304939,6.475061,OK
+problem_50_0.85 2.json,379657,282843,4.194532,OK
+problem_50_0.85.json,379657,282843,4.175298,OK
+problem_70_0.5 2.json,456986,456986,9.605554,OK
+problem_70_0.5.json,456986,456986,9.467572,OK
+problem_70_0.7 2.json,543194,374013,23.705114,OK
+problem_70_0.7 3.json,543194,374013,22.767588,OK
+problem_70_0.7.json,543194,374013,22.279149,OK
+problem_70_0.85 2.json,520602,190484,16.069831,OK
+problem_70_0.85.json,520602,190484,15.491519,OK

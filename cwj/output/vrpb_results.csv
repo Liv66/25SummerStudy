@@ -1,0 +1,46 @@
+instance,initial_rmp_lp_objval,total_cost,runtime_sec,status
+problem_100_0.5 2.json,572180.0,572180.0,19.927929,OK
+problem_100_0.5 3.json,572180.0,572180.0,18.966439,OK
+problem_100_0.5.json,572180.0,572180.0,19.481386,OK
+problem_100_0.7.json,813551.0,586069.0,22.5305,OK
+problem_100_0.85 2.json,633295.0,464111.0,26.101997,OK
+problem_100_0.85.json,633295.0,464111.0,26.172836,OK
+problem_130_0.5 2.json,709617.0,273088.0,47.931863,OK
+problem_130_0.5.json,709617.0,273088.0,46.99093,OK
+problem_130_0.7 2.json,,,60.0,TIMEOUT
+problem_130_0.7.json,,,60.0,TIMEOUT
+problem_130_0.85 2.json,,,60.0,TIMEOUT
+problem_130_0.85.json,,,60.0,TIMEOUT
+problem_150_0.5 2.json,740759.0,79984.0,25.249245,OK
+problem_150_0.5 3.json,740759.0,79984.0,25.364739,OK
+problem_150_0.5.json,740759.0,79984.0,25.784521,OK
+problem_150_0.7 2.json,728310.0,728310.0,35.314062,OK
+problem_150_0.7.json,728310.0,728310.0,35.135997,OK
+problem_150_0.85 2.json,716867.0,716867.0,31.674115,OK
+problem_150_0.85.json,716867.0,716867.0,31.676571,OK
+problem_200_0.7 2.json,,1236800.0,0.041255,OK
+problem_200_0.7.json,,1236800.0,0.04175,OK
+problem_20_0.7.json,223711.0,171524.0,0.343543,OK
+problem_220_0.7 2.json,,,60.0,TIMEOUT
+problem_220_0.7 3.json,,,60.0,TIMEOUT
+problem_220_0.7.json,,,60.0,TIMEOUT
+problem_30_0.7.json,288318.0,227696.0,1.056875,OK
+problem_40_0.6 2.json,329677.0,247063.0,2.955351,OK
+problem_40_0.6.json,329677.0,247063.0,2.954117,OK
+problem_500_0.7 2.json,,,60.0,TIMEOUT
+problem_500_0.7 3.json,,,60.0,TIMEOUT
+problem_500_0.7.json,,,60.0,TIMEOUT
+problem_50_0.5 2.json,459466.0,304305.0,6.198404,OK
+problem_50_0.5.json,459466.0,304305.0,6.152365,OK
+problem_50_0.7 2.json,387604.0,304939.0,6.292208,OK
+problem_50_0.7 3.json,387604.0,304939.0,6.302676,OK
+problem_50_0.7.json,387604.0,304939.0,6.292718,OK
+problem_50_0.85 2.json,379657.0,282843.0,3.923546,OK
+problem_50_0.85.json,379657.0,282843.0,3.900434,OK
+problem_70_0.5 2.json,456986.0,456986.0,8.992343,OK
+problem_70_0.5.json,456986.0,456986.0,9.044704,OK
+problem_70_0.7 2.json,543194.0,374013.0,21.705791,OK
+problem_70_0.7 3.json,543194.0,374013.0,21.447416,OK
+problem_70_0.7.json,543194.0,374013.0,21.42784,OK
+problem_70_0.85 2.json,520602.0,190484.0,14.623372,OK
+problem_70_0.85.json,520602.0,190484.0,14.819778,OK
