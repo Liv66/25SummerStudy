@@ -14,7 +14,7 @@ from .cwj_pricing import *
 def strong_diving_with_residual_cg(
     problem_info: Dict,
     route_pool: List[Tuple[List[int], float]],
-    max_candidates: int = 6,
+    max_candidates: int = 3,
     res_max_iters: int = 10,
     log_print: bool = False                     # 로그 확인
 ) -> List[Tuple[List[int], float]] | None:
@@ -71,7 +71,7 @@ def strong_diving_with_residual_cg(
                 pool_local, node_types, Kcap, relax=True, customers_override=remaining
             )
             if duals_res is None or obj_res == float('inf'):
-                return None, None, float('inf'), pool_local  # infeasible
+                return None, None, float('inf'), pool_local
             # 프라이싱
             d4p = duals_res if duals_res is not None else {}
             new_cols = pricing_greedy(d4p, mu_res if mu_res is not None else 0.0,
@@ -91,16 +91,15 @@ def strong_diving_with_residual_cg(
                 else:
                     if c_new + 1e-6 < route_pool[idx_same][1]:
                         route_pool[idx_same] = (r_new, c_new)
-                        # pool_local에도 반영
                         for j, (rr, cc) in enumerate(pool_local):
                             if frozenset(rr[1:-1]) == S_new:
                                 pool_local[j] = (r_new, c_new)
                                 break
                         replaced += 1
             if added == 0 and replaced == 0:
-                # 수렴
+
                 return duals_res, mu_res, obj_res, pool_local
-        # 최대 반복 후 마지막 상태 반환
+
         _, duals_res, mu_res, obj_res, _m_res = solve_master_problem_gurobi(
             pool_local, node_types, Kcap, relax=True, customers_override=remaining
         )
@@ -131,7 +130,6 @@ def strong_diving_with_residual_cg(
         # 2) 잔여 CG로 컬럼 보강 & 현재 바운드 계산
         duals_base, mu_base, obj_base, base_pool = residual_cg_loop(base_pool, remaining, K_rem)
         if duals_base is None or obj_base == float('inf'):
-            # FULL pool에서도 불능이면 간단 보강 후 재시도
             seeds = generate_initial_patterns(K_rem, Q, node_types, node_demands, dist_mat, seed=77 + step)
             added = 0
             rem_set = set(remaining)
@@ -149,7 +147,6 @@ def strong_diving_with_residual_cg(
                 if log_print:
                     print("[StrongDive] RLP infeasible and enrichment failed.")
                 return None
-            # rebuild pools after enrichment
             pool_res = build_residual_pool(route_pool, covered)
             base_pool = pool_res if not lacking_customers(pool_res, remaining) else list(route_pool)
             duals_base, mu_base, obj_base, base_pool = residual_cg_loop(base_pool, remaining, K_rem)
@@ -159,7 +156,6 @@ def strong_diving_with_residual_cg(
                 return None
 
         # 3) 후보 생성: 현재 base RLP의 분수해에서 x가 큰/1에 가까운 순으로 상위 k
-        #    (모형을 다시 풀어 변수값을 읽기 위해 한 번 더 solve 호출)
         _, _, _, _, m_read = solve_master_problem_gurobi(
             base_pool, node_types, K_rem, relax=True, customers_override=remaining
         )
@@ -169,18 +165,17 @@ def strong_diving_with_residual_cg(
             if v is None:
                 continue
             xi = v.X
-            # disjoint 보장: 강한 다이빙 선택 후보는 이미 covered와 서로소여야 함
             if not set(base_pool[i][0][1:-1]).isdisjoint(covered):
                 continue
             if xi > 1e-9:
-                # 1에 가까운 순서 우선
+
                 vals.append((i, xi, abs(1.0 - xi)))
         if not vals:
             if log_print:
                 print("[StrongDive] No fractional columns to dive on.")
             return None
-        # 상위 후보 추출
-        vals.sort(key=lambda t: t[2])   # closeness to 1 (작을수록 우선)
+
+        vals.sort(key=lambda t: t[2])
         candidates = vals[:min(max_candidates, len(vals))]
 
         # 4) 후보별 룩어헤드 평가
@@ -189,14 +184,12 @@ def strong_diving_with_residual_cg(
         best_bundle = None  # (route, cost, chosen_var_value)
         for ci, xi, _cl in candidates:
             route_cand, cost_cand = base_pool[ci]
-            # 가상 고정
             covered_sim = covered | set(route_cand[1:-1])
             K_sim = K_rem - 1
             if K_sim < 0:
                 continue
             remaining_sim = remaining_list(covered_sim)
             if not remaining_sim:
-                # 모든 고객 커버 완료 → 총 바운드는 cost_cand (잔여 0)
                 total_bound = cost_cand
                 if total_bound < best_score:
                     best_score = total_bound
@@ -204,16 +197,15 @@ def strong_diving_with_residual_cg(
                     best_bundle = (route_cand, cost_cand, xi)
                 continue
 
-            # residual pool for sim
             pool_res_sim = build_residual_pool(route_pool, covered_sim)
             base_pool_sim = pool_res_sim
             if lacking_customers(pool_res_sim, remaining_sim):
                 base_pool_sim = list(route_pool)
 
-            # 작은 residual CG 루프 돌리기
+
             duals_sim, mu_sim, obj_sim, base_pool_sim = residual_cg_loop(base_pool_sim, remaining_sim, K_sim)
             if duals_sim is None or obj_sim == float('inf'):
-                # infeasible → 큰 패널티
+
                 total_bound = math.inf
             else:
                 total_bound = cost_cand + obj_sim
@@ -238,7 +230,6 @@ def strong_diving_with_residual_cg(
         incumbent.append((chosen_route, chosen_cost))
         covered |= set(chosen_route[1:-1])
         K_rem -= 1
-        # 반복
 
 # -----------------------------
 # Top-level Algorithm
@@ -268,15 +259,20 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
     node_demands = problem_info['node_demands']
     dist_mat = problem_info['dist_mat']
 
-    t0 = time.time()  # 전체 실행시간 측정 시작
+    t0 = time.time()
 
     # 0) Initial route pool
     route_pool = generate_initial_patterns(K, Q, node_types, node_demands, dist_mat, seed=0)
+    rmp_init_cost = None
 
     # 1) Global Column Generation (LP)
     MAX_ITERS = 50
     for it in range(1, MAX_ITERS + 1):
         _, duals, mu, obj, _ = solve_master_problem_gurobi(route_pool, node_types, K, relax=True)
+        if rmp_init_cost is None:
+            rmp_init_cost = obj
+            print(f"Initial RMP(LP) ObjVal = {rmp_init_cost:.2f}")
+
         # Pricing on full problem
         new_cols = pricing_greedy(duals if duals is not None else {},
                                   mu if mu is not None else 0.0,
@@ -292,19 +288,17 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
         if added == 0:
             break
 
-    # --- Sub-MIP 유틸(이 함수 내부에서만 사용) ---
+    # --- Sub-MIP 유틸 ---
     def _build_sub_pool(pool: List[Tuple[List[int], float]],
                         incumbent: List[Tuple[List[int], float]] | None,
                         max_size: int = 400) -> List[Tuple[List[int], float]]:
 
         keep, seen = [], set()
-        # incumbent 우선 포함
         if incumbent:
             for r, c in incumbent:
                 key = frozenset(r[1:-1])
                 if key not in seen:
                     keep.append((r, c)); seen.add(key)
-        # 저비용 위주로 채움
         for r, c in sorted(pool, key=lambda rc: rc[1]):
             if len(keep) >= max_size:
                 break
@@ -316,7 +310,6 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
     def _solve_submip(pool_sub: List[Tuple[List[int], float]],
                       time_limit: float | None,
                       incumbent: List[Tuple[List[int], float]] | None = None) -> List[Tuple[List[int], float]]:
-        # 제한된 sub-pool로 정수 RMP (Set Partitioning + 차량 수 제약) 풀이
         m = gp.Model("VRPB_SubMIP")
         m.Params.OutputFlag = 0
         if time_limit is not None and time_limit > 0:
@@ -332,7 +325,6 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
             m.addConstr(gp.quicksum(x[r] for r in range(R) if i in pool_sub[r][0]) == 1, name=f"cover_{i}")
         m.addConstr(gp.quicksum(x[r] for r in range(R)) <= K, name="veh_count")
 
-        # MIP start
         if incumbent:
             idx_by_set = {frozenset(pool_sub[r][0][1:-1]): r for r in range(R)}
             for r_inc, _ in incumbent:
@@ -356,7 +348,7 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
         log_print= False       # 로그 출력
     )
 
-    # ----- (A) strong diving 성공: incumbent 존재 → Sub-MIP 폴리싱 -----
+    # ----- (A) strong diving 성공 -----
     if dive_sol is not None:
         elapsed = time.time() - t0
         remaining = 60.0 - elapsed
@@ -379,7 +371,7 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
             total = sum(c for _, c in dive_sol)
             return dive_sol
 
-    # ----- (B) strong diving 실패/중단 → 그래도 Sub-MIP 시도 (시간 제한 준수) -----
+    # ----- (B) strong diving 실패/중단 -----
     elapsed = time.time() - t0
     remaining = 60.0 - elapsed
     if remaining <= 0:
@@ -398,7 +390,7 @@ def VRPB_CG_Heuristic(problem_info: Dict) -> List[Tuple[List[int], float]]:
     if sol_sub:
         return sol_sub
 
-    # 마지막 폴백: 그리디 커버
+    # 마지막 폴백: 그리디
     customers = [i for i, t in enumerate(node_types) if t in (1, 2)]
     uncovered = set(customers)
     chosen: List[Tuple[List[int], float]] = []

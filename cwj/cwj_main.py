@@ -1,6 +1,7 @@
 import json
 import time
 import os, sys
+import signal
 
 # import 변환
 try:
@@ -57,19 +58,33 @@ def cwj_run(problem_info):
             total_cost += cost
         print(f"Total Cost: {int(total_cost)}")
     else:
-
         for r in routes_only:
             print(f"Route: {r}")
 
     return routes_only
 
+
+# 타임아웃 핸들러
+def timeout_handler(signum, frame):
+    raise TimeoutError("Time limit exceeded")
+
+
 # 실행부
 if __name__ == '__main__':
-    with open('/Users/michael/Desktop/RiskLAB./Study/25SummerStudy/instances/problem_20_0.7.json', 'r') as f:
+    with open('/Users/michael/Desktop/RiskLAB./Study/25SummerStudy/instances/problem_70_0.7.json', 'r') as f:
         instance = json.load(f)
 
-    start_time = time.time()
-    cwj_run(instance)
-    end_time = time.time()
-    elapsed = end_time - start_time
-    print(f"\n실행 시간: {elapsed:.2f}초")
+    # 60초 제한 설정
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(60)  # 60초 타이머 시작
+
+    try:
+        start_time = time.time()
+        cwj_run(instance)
+        end_time = time.time()
+        elapsed = end_time - start_time
+        print(f"\n실행 시간: {elapsed:.2f}초")
+    except TimeoutError:
+        print("\n[ERROR] Time out.")
+    finally:
+        signal.alarm(0)  # 타이머 해제
