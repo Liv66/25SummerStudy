@@ -1,6 +1,5 @@
 from math import sqrt
 import matplotlib.pyplot as plt
-from ortools.sat.python import cp_model
 
 def two_opt(nodes, dist_matrix):
     """

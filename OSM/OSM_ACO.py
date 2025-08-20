@@ -1,7 +1,7 @@
 import random
 import numpy
 import time
-from OSM_util import two_opt
+from .OSM_util import two_opt
 
 class ACO_VRPB:
     def __init__(self, alpha=1, beta=1.5, sigma=3, ro=0.8, th=80, iterations=200, ants=22, q0=0.9):
