@@ -17,26 +17,22 @@ def fast_feasible_check_alns(
         return False
     if len(route) < 3:  # depot-node-depot
         return True
-    if node_types[route[1]] == 0:
-        return False
 
     # ── 1. 적재량 / 상태 초기화 ────────────────
     load = 0
     in_pick = False
 
-    # ── 2. 경로 순회 ────────────────────────
+    # ── 2. 경로 순회하며 순서 및 용량 검사 ─────────────────
     for i in range(1, len(route) - 1):
-        prev = route[i - 1]
         curr = route[i]
-
         t = node_types[curr]
         d = demands[curr]
 
-        if t == 1:  # delivery
+        if t == 1:  # delivery (배송)
             if in_pick:
-                return False
+                return False  # 회수 시작 후 배송 불가
             load += d
-        else:  # pickup
+        else:  # pickup (회수)
             if not in_pick:
                 in_pick = True
                 load = 0  # 배송 화물 하차 후 적재 시작
@@ -44,9 +40,16 @@ def fast_feasible_check_alns(
 
         if load > capa:
             return False
-        if load < 0:
+        if load < 0:  # 만약을 위한 방어 코드
             return False
 
+    # ★★★★★ 핵심 수정 사항 ★★★★★
+    # 경로에 배송(delivery, type 1) 노드가 하나라도 있는지 최종 확인합니다.
+    # 하나도 없다면, 이 경로는 백홀 전용이므로 규칙 위반입니다.
+    if not any(node_types[n] == 1 for n in route[1:-1]):
+        return False
+
+    # 모든 검사를 통과한 경우
     return True
 
 
@@ -116,6 +119,9 @@ def alns_vrpb(
         max_vehicles: int,
         deadline: float,  # time_limit 대신 deadline을 받음
         verbose: bool = False,  # 로그 제어 매개변수 추가
+# ★★★ 1. 로컬 서치 ON/OFF 스위치 파라미터 추가 ★★★
+        # 이 값을 False로 주면 Local Search를 실행하지 않습니다.
+        enable_local_search: bool = True
 ) -> tuple[list[list[int]], float]:
 
     def log(message: str, force: bool = False):
@@ -190,13 +196,25 @@ def alns_vrpb(
                 weights[i] = max(0.1, weights[i] * 0.95)
             scores[i], counts[i] = 0, 0
 
-    def get_remove_count(routes, min_ratio=0.10, max_ratio=0.25):
-        """더 보수적인 제거 비율"""
+    def get_remove_count(routes, min_ratio=0.1, max_ratio=0.25, hard_limit_ratio=1):
+        """
+        제거 비율을 정밀하게 제어하는 버전
+        hard_limit_ratio: 제거 개수의 절대적 상한 비율 (기본값: 1/3)
+        """
         total_nodes = sum(len(r) - 2 for r in routes)
         if total_nodes == 0:
             return 0
+
         ratio = random.uniform(min_ratio, max_ratio)
-        return max(1, min(total_nodes // 3, int(total_nodes * ratio)))
+
+        # total_nodes // 3 대신 hard_limit_ratio 사용
+        hard_limit_count = int(total_nodes * hard_limit_ratio)
+
+        # hard_limit_count가 0이 되는 것을 방지
+        if hard_limit_count == 0 and total_nodes > 0:
+            hard_limit_count = total_nodes
+
+        return max(1, min(hard_limit_count, int(total_nodes * ratio)))
 
     def random_removal(routes, unassigned, iteration):
         flat_nodes = [n for r in routes for n in r[1:-1]]
@@ -777,14 +795,17 @@ def alns_vrpb(
 
         # 집중적 지역 탐색 호출 시 deadline 전달
         if iteration % 20 == 0:
-            # ★★★ 4. local_search 호출 시 deadline 전달 ★★★
-            if intensive_local_search(cur_routes, deadline):
-                new_cost = calculate_total_cost(cur_routes)
-                if new_cost < cur_cost:
-                    cur_cost = new_cost
-                    if new_cost < best_cost:
-                        best_cost, best_routes = new_cost, [r[:] for r in cur_routes]
-                        log(f"[LOCAL] Iter {iteration}: Local search improved to {best_cost:.1f}")
+
+            # ★★★ 2-1. 스위치를 확인하여 로컬 서치 실행 여부 결정 ★★★
+            # enable_local_search가 True일 때만 주기적인 로컬 서치를 실행합니다.
+            if enable_local_search and iteration % 20 == 0:
+                if intensive_local_search(cur_routes, deadline):
+                    new_cost = calculate_total_cost(cur_routes)
+                    if new_cost < cur_cost:
+                        cur_cost = new_cost
+                        if new_cost < best_cost:
+                            best_cost, best_routes = new_cost, [r[:] for r in cur_routes]
+                            log(f"[LOCAL] Iter {iteration}: Local search improved to {best_cost:.1f}")
 
         max_retry = 3  # 재시도 횟수 줄임
         for retry in range(max_retry):
@@ -875,8 +896,11 @@ def alns_vrpb(
 
     # 최종 집중적 지역 탐색
     log("[INFO] Final intensive local search...")
-    # ★★★ 5. 최종 local_search 호출 시에도 deadline 전달 ★★★
-    final_improved = intensive_local_search(best_routes, deadline)
+    # ★★★ 2-2. 스위치를 확인하여 최종 로컬 서치 실행 여부 결정 ★★★
+    final_improved = False  # 기본값은 False
+    if enable_local_search:
+        final_improved = intensive_local_search(best_routes, deadline)
+
     if final_improved:
         final_cost = calculate_total_cost(best_routes)
         if final_cost < best_cost:

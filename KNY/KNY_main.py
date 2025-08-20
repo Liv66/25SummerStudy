@@ -283,8 +283,17 @@ def KNY_run(problem_info: dict, time_limit: int = 60):
     #log_print(f"[INFO] ALNS 할당 시간: {alns_run_duration:.2f}초")
     alns_start = time.time()
 
-    best_routes, _ = alns_vrpb(init_routes, dist, node_types, demands, capa, depot_idx, max_vehicles=K,
-                               deadline=alns_deadline)
+    # --- Local Search 실행 여부를 여기서 제어 ---
+    # False로 바꾸면 Local Search 없이 순수 ALNS만 실행됩니다.
+    # True로 바꾸거나 이 줄을 지우면 Local Search가 다시 켜집니다.
+    USE_LOCAL_SEARCH = True
+
+    best_routes, _ = alns_vrpb(
+        init_routes, dist, node_types, demands, capa, depot_idx,
+        max_vehicles=K,
+        deadline=alns_deadline,
+        enable_local_search=USE_LOCAL_SEARCH # <-- 스위치 적용
+    )
     alns_elapsed = time.time() - alns_start
 
     # 후처리는 전체 데드라인(global_deadline)을 기준으로 판단
@@ -311,7 +320,9 @@ def KNY_run(problem_info: dict, time_limit: int = 60):
         # CSV 저장을 위한 통계 계산 및 파일 쓰기
         final_stats = get_solution_stats(best_routes, dist, demands, capa, node_types)
 
-        experiment_notes = {'수정한 부분': '없음'}
+        # 실험 내용 자동 기록
+        ls_status = "LS_ON" if USE_LOCAL_SEARCH else "LS_OFF"
+        experiment_notes = {'수정한 부분': f'없음'}
         log_print(f"[🔬] 이번 실행 내용: {experiment_notes['수정한 부분']}")
 
         log_data = {
@@ -339,34 +350,41 @@ def KNY_run(problem_info: dict, time_limit: int = 60):
     return best_routes
 
 
+
 # ─────────────────────────────────────────────────────────────
 # 8) 프로그램 실행 부분
 # ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    # True로 설정하면 KNY_run 내부의 CSV 저장 로직이 자동으로 작동합니다.
-    ENABLE_LOGGING = False
+    ENABLE_LOGGING = False #True하면 csv 저장, log 출력
 
-    N_list = [50, 70, 100, 130, 150]
-    line_p_list = [0.5, 0.7, 0.85]
-
-    # instances 폴더 경로 설정
+    # 실행할 특정 인스턴스 조합만 명시
+    selected_instances = [
+        (50, 0.5),
+        (50, 0.85),
+        (150, 0.5),
+        (150, 0.85),
+        (100, 0.5),
+        (100, 0.7),
+        (100, 0.85),
+    ]
     try:
         ROOT = Path(__file__).resolve().parents[1]
         instances_dir = ROOT / "instances"
     except IndexError:
         instances_dir = Path("./instances")
 
-    # 모든 인스턴스 순회 실행
-    for N in N_list:
-        for line_p in line_p_list:
-            title = f"problem_{N}_{line_p}"
-            instance_path = instances_dir / f"{title}.json"
-            time_limit = 60
+    time_limit = 60
+    num_repeats = 1   # 각 인스턴스를 반복할 횟수
 
-            # --- 각 인스턴스 실행 전, 구분을 위한 제목 출력 ---
-            print(f"--- Starting instance: {title} ---")
+    # 선택된 인스턴스만 순회 실행
+    for N, line_p in selected_instances:
+        title = f"problem_{N}_{line_p}"
+        instance_path = instances_dir / f"{title}.json"
 
-            # 인스턴스 파일 로드
+        # 반복 실행
+        for run_id in range(1, num_repeats + 1):
+            print(f"--- Starting instance: {title} (Run {run_id}/{num_repeats}) ---")
+
             try:
                 with open(instance_path, "r", encoding='utf-8') as f:
                     problem_info = json.load(f)
@@ -374,13 +392,12 @@ if __name__ == "__main__":
             except FileNotFoundError:
                 print(f"ERROR: Cannot find instance file -> {instance_path}")
                 print("--- Skipping to next instance ---")
-                continue  # 다음 인스턴스로 넘어감
+                break  # 해당 파일이 없으면 반복을 중단하고 다음 인스턴스로 넘어감
 
-            # KNY_run 함수 실행
             solution = KNY_run(problem_info, time_limit)
 
-            # --- 해답(이중 리스트)을 기존과 동일한 형식으로 출력 ---
+            # 해답 출력
             for route in solution:
                 print(route)
 
-    print("--- All instances finished ---")
+    print("--- All selected instances finished ---")
