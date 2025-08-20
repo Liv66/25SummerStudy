@@ -7,7 +7,7 @@ from JHJ.JHJ_run import JHJ_run
 from util import *
 
 
-def JHJ_main(problem_info, time_limit=60,log=False):
+def JHJ_main(problem_info, time_limit=60, log=True):
 
     start = time.time()
     sol = JHJ_run(problem_info, time_limit)
@@ -24,8 +24,11 @@ def JHJ_main(problem_info, time_limit=60,log=False):
 
 
 if __name__ == '__main__':
-    with open('C:/Users/hyeon/Desktop/study/25SummerStudy/instances/problem_20_0.7.json', 'r') as f:
-        problem_info = json.load(f)
+    N_list = [70]
+    P_list = [0.5]
+    for n in N_list:
+        for p in P_list:
+            with open(f'C:/Users/hyeon/Desktop/study/25SummerStudy/instances/problem_{n}_{p}.json', 'r') as f:
+                problem_info = json.load(f)
 
     sol = JHJ_main(problem_info)
-    print(sol)
