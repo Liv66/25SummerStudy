@@ -3,7 +3,7 @@ import json
 from OSM.OSM_ACO import ACO_VRPB
 from OSM.OSM_util import check_feasible, plot_cvrp
 
-def OSM_run(problem_info, time_limit=57, plot=False, log=True):
+def OSM_run(problem_info, time_limit=57, plot=False, log=False):
 
     start = time.time()
     K = problem_info['K']
