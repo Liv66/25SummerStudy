@@ -1,5 +1,6 @@
 import time
 import json
+import matplotlib.pyplot as plt
 from OSM_ACO import ACO_VRPB
 from OSM_util import check_feasible, plot_cvrp
 

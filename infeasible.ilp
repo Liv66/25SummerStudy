@@ -1,0 +1,8 @@
+\ Model VRPB_Master_copy
+\ LP format - for model browsing. Use MPS format to capture full model detail.
+Minimize
+ 
+Subject To
+ visit_8: >= 1
+Bounds
+End

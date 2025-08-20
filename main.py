@@ -1,7 +1,14 @@
 import json
 import random
 
+from HSH.HSH_main import HSH_run
+from JHJ.main_v2 import jhj_main
 from KJH.KJH_main import KJH_run
+from KNY.KNY_main import kny_run
+from OSM.OSM_main import OSM_run
+from Ock.Ock_main import Ock_run
+from PWB.PWB_main import PWB_run
+from cwj.cwj_main import cwj_run
 from util import *
 
 
@@ -36,32 +43,31 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
 
 def main():
-    N_list = [50, 70, 100, 130, 150]
-    line_p_list = [0.5, 0.7, 0.85]
-
+    # N_list = [50, 70, 100, 130, 150]
+    # line_p_list = [0.5, 0.7, 0.85]
     capa = 3200
+    N_list = [50]
+    line_p_list = [0.5]
+    algorithms = [cwj_run, jhj_main, KJH_run, HSH_run, Ock_run, kny_run, OSM_run, PWB_run]
 
     for N in N_list:
         for line_p in line_p_list:
             title = f"problem_{N}_{line_p}"
             time_limit = 60
             problem = f"instances/problem_{N}_{line_p}.json"
-            try:
-                with open(problem, "r", encoding='utf-8') as f:
-                    problem_info = json.load(f)
 
-            except FileNotFoundError:
-                instance_generator(problem, N=N, line_p=line_p, capa=capa)
-                with open(problem, "r", encoding='utf-8') as f:
-                    problem_info = json.load(f)
+            with open(problem, "r", encoding='utf-8') as f:
+                problem_info = json.load(f)
             print("------------------------")
-            start = time.time()
-            sol = KJH_run(problem_info, time_limit)
-            elapsed = round(time.time() - start, 2)
+            for idx, run in enumerate(algorithms):
+                print("###########", idx)
+                start = time.time()
+                sol = run(problem_info)
+                elapsed = round(time.time() - start, 2)
 
-            obj = check_feasible(problem_info, sol, elapsed, time_limit)
-            print(title, obj, elapsed)
-    # plot_vrpb(problem_info, sol, f'obj : {obj} elapsed : {elapsed}')
+                obj = check_feasible(problem_info, sol, elapsed, time_limit)
+
+                print(title, obj, elapsed)
 
 
 if __name__ == '__main__':
