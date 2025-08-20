@@ -1,7 +1,14 @@
 import json
 import random
 
-from KJH.KJH_main import KJH_main
+from HSH.HSH_main import HSH_run
+from JHJ.main_v2 import jhj_main
+from KJH.KJH_main import KJH_run
+from KNY.KNY_main import kny_run
+from OSM.OSM_main import OSM_run
+from Ock.Ock_main import Ock_run
+from PWB.PWB_main import PWB_run
+from cwj.cwj_main import cwj_run
 from util import *
 
 
@@ -9,7 +16,7 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
     # 인덱스 0은 depot
     problem_info = {}
     nodes_coord = [(12000, 16000)] + [(random.uniform(0, 24000), random.uniform(0, 32000)) for _ in range(N - 1)]
-    demands = [0] + [int(random.gauss(500, 200)) for _ in range(N - 1)]
+    demands = [0] + [max(abs(int(random.gauss(500, 200))), 10) for _ in range(N - 1)]
 
     num_line = int(N * line_p)
     node_type = [2 for _ in range(N)]
@@ -20,7 +27,7 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
     line_K = bin_packing([demands[i] for i in range(N) if node_type[i] == 1], capa)  # 차량 수
     back_K = bin_packing([demands[i] for i in range(N) if node_type[i] == 2], capa)
-    K = max(line_K, back_K)
+    K = max(line_K, back_K) + 1
     dist_mat = get_distance(nodes_coord)  # 거리 행렬 계산
 
     problem_info['N'] = N
@@ -36,25 +43,31 @@ def instance_generator(problem, N=50, capa=3000, line_p=0.7):
 
 
 def main():
-    N = 220
-    line_p = 0.7
-    capa = 2000
-    problem = f"instances/problem_{N}_{line_p}.json"
-    try:
-        with open(problem, "r", encoding='utf-8') as f:
-            problem_info = json.load(f)
+    # N_list = [50, 70, 100, 130, 150]
+    # line_p_list = [0.5, 0.7, 0.85]
+    capa = 3200
+    N_list = [50]
+    line_p_list = [0.5]
+    algorithms = [cwj_run, jhj_main, KJH_run, HSH_run, Ock_run, kny_run, OSM_run, PWB_run]
 
-    except FileNotFoundError:
-        instance_generator(problem, N=N, line_p=line_p, capa=capa)
-        with open(problem, "r", encoding='utf-8') as f:
-            problem_info = json.load(f)
-    start = time.time()
-    sol = KJH_main(problem_info)
+    for N in N_list:
+        for line_p in line_p_list:
+            title = f"problem_{N}_{line_p}"
+            time_limit = 60
+            problem = f"instances/problem_{N}_{line_p}.json"
 
-    elapsed = time.time() - start
-    time_limit = 60
-    obj = check_feasible(problem_info, sol, elapsed, time_limit)
-    plot_vrpb(problem_info, sol, f'obj : {obj}')
+            with open(problem, "r", encoding='utf-8') as f:
+                problem_info = json.load(f)
+            print("------------------------")
+            for idx, run in enumerate(algorithms):
+                print("###########", idx)
+                start = time.time()
+                sol = run(problem_info)
+                elapsed = round(time.time() - start, 2)
+
+                obj = check_feasible(problem_info, sol, elapsed, time_limit)
+
+                print(title, obj, elapsed)
 
 
 if __name__ == '__main__':

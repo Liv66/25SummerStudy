@@ -1,18 +1,29 @@
+import time
+
+from KJH.ILSRVND import *
 from KJH.KJH_vrpb import *
+from KJH.optimizer import GRB_solver
 
+from util import plot_cvrp
 
-def KJH_main(problem_info):
+def KJH_run(problem_info, time_limit=60, log=False):
+    start = time.time()
+    N = problem_info['N']
     K = problem_info['K']
     node_type = problem_info['node_types']
     node_demand = problem_info['node_demands']
     capa = problem_info['capa']
     dist_mat = problem_info['dist_mat']
-
+    random_cost = [0] + [random.random() for _ in range(N - 1)]
     c = Construction(K, node_type, node_demand, capa, dist_mat)
-    c.construct()
-    sol = [route.hist for route in c.routes]
-    return sol
+    initial_routes = c.construct()
+    spool = SolPool(initial_routes, capa, node_demand, node_type, random_cost)
+    ils_rvnd = ILS_RVND(K, dist_mat)
+    ils_rvnd.construct = c.construct
 
+    gurobi_solver = GRB_solver()
 
-if __name__ == "__main__":
-    KJH_main()
+    ils_rvnd.run(N, spool, gurobi_solver, start, time_limit=time_limit, log=log)
+    print(f"ILS-RVND bset cost :{spool.best_cost}")
+    return [route.hist for route in spool.best_sol]
+
