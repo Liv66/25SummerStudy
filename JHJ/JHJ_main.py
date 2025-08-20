@@ -1,13 +1,11 @@
 import json
-import random
-import os, sys
-
+import time
 
 from JHJ.JHJ_run import JHJ_run
-from util import *
+from JHJ.JHJ_util import *
 
 
-def JHJ_main(problem_info, time_limit=60, log=True):
+def JHJ_main(problem_info, time_limit=60, log=False):
 
     start = time.time()
     sol = JHJ_run(problem_info, time_limit)
@@ -20,15 +18,29 @@ def JHJ_main(problem_info, time_limit=60, log=True):
     if log:
         print(obj, elapsed)
 
-    return sol
+    return obj, elapsed, sol
 
 
 if __name__ == '__main__':
-    N_list = [70]
+    N_list = [50]
     P_list = [0.5]
+
+    results_list = []
+
     for n in N_list:
         for p in P_list:
             with open(f'C:/Users/hyeon/Desktop/study/25SummerStudy/instances/problem_{n}_{p}.json', 'r') as f:
                 problem_info = json.load(f)
 
-    sol = JHJ_main(problem_info)
+            instance_name = f'problem_{n}_{p}'
+            obj, elapsed, sol = JHJ_main(problem_info)
+
+            # result_data = {
+            #     'problem_instance': instance_name, 'obj': obj, 'time': elapsed
+            # }
+
+            # results_list.append(result_data)
+
+    # df_results = pd.DataFrame(results_list)
+    #
+    # df_results.to_csv('raw_results.csv', index=False, encoding='utf-8-sig')
