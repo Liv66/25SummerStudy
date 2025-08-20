@@ -1,7 +1,7 @@
 import time
 import json
-from .OSM_ACO import ACO_VRPB
-from .OSM_util import check_feasible, plot_cvrp
+from OSM.OSM_ACO import ACO_VRPB
+from OSM.OSM_util import check_feasible, plot_cvrp
 
 def OSM_run(problem_info, time_limit=57, plot=False, log=True):
 
