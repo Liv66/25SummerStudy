@@ -13,7 +13,7 @@ class FirstImprovementStrategy:
             return False
 
         # 3. 2-opt 연산 시도
-        if iterations_no_improvement <15 and self._try_two_opt(solution, start_time, time_limit):
+        if iterations_no_improvement <20 and self._try_two_opt(solution, start_time, time_limit):
             return True
 
         # 1. Exchange 연산 시도
@@ -83,7 +83,7 @@ class FirstImprovementStrategy:
             if time.time() - start_time >= time_limit:
                 return False
                 
-            if route.get_customers_count() < 4:  # 최소 4개 고객 필요
+            if len(route.get_customers()) < 4:  # 최소 4개 고객 필요
                 continue
                 
             for i in range(1, route.size() - 2):
@@ -177,7 +177,7 @@ class FirstImprovementStrategy:
         
         return distance_gain > 1e-9
     
-    def _calculate_relocate_penalty_gain(self, solution, from_route_idx, from_pos, to_route_idx, customer) -> float:
+    def _calculate_relocate_penalty_gain(self, solution, from_route_idx, from_pos, to_route_idx, customer):
 
         routes = solution.get_routes()
         from_route = routes[from_route_idx]
@@ -196,10 +196,10 @@ class FirstImprovementStrategy:
         penalty_before = from_route.get_penalty_cost(penalty_rate) + to_route.get_penalty_cost(penalty_rate)
         
         # 이동 후 부하량 계산
-        from_delivery_after = from_route.get_delivery_load() - (customer_demand if is_linehaul else 0)
-        from_pickup_after = from_route.get_pickup_load() - (0 if is_linehaul else customer_demand)
-        to_delivery_after = to_route.get_delivery_load() + (customer_demand if is_linehaul else 0)
-        to_pickup_after = to_route.get_pickup_load() + (0 if is_linehaul else customer_demand)
+        from_delivery_after = from_route.delivery_load - (customer_demand if is_linehaul else 0)
+        from_pickup_after = from_route.pickup_load - (0 if is_linehaul else customer_demand)
+        to_delivery_after = to_route.delivery_load + (customer_demand if is_linehaul else 0)
+        to_pickup_after = to_route.pickup_load + (0 if is_linehaul else customer_demand)
         
         # 이동 후 페널티
         from_violation = max(0, from_delivery_after - capa) + max(0, from_pickup_after - capa)
@@ -208,7 +208,7 @@ class FirstImprovementStrategy:
         
         return penalty_before - penalty_after
     
-    def _check_relocate_order(self, solution, from_route_idx, from_pos, to_route_idx, to_pos, customer) -> bool:
+    def _check_relocate_order(self, solution, from_route_idx, from_pos, to_route_idx, to_pos, customer):
 
         routes = solution.get_routes()
         from_route = routes[from_route_idx]
@@ -222,18 +222,18 @@ class FirstImprovementStrategy:
             return False
         
         # 백홀 고객을 다른 경로로 이동시킬 때, 대상 경로에 라인홀이 없으면 불가
-        if not is_linehaul and from_route_idx != to_route_idx and to_route.get_linehaul_count() == 0:
+        if not is_linehaul and from_route_idx != to_route_idx and len(to_route.linehaul_customers) == 0:
             return False
         
         # 라인홀 고객을 제거했을 때 해당 경로에 백홀만 남으면 불가
-        if is_linehaul and from_route.get_linehaul_count() == 1 and from_route.get_backhaul_count() > 0:
+        if is_linehaul and len(from_route.linehaul_customers) == 1 and len(from_route.backhaul_customers) > 0:
             return False
         
         # 삽입 위치 체크
         if is_linehaul:
-            return to_pos <= to_route.get_linehaul_count() + 1
+            return to_pos <= len(to_route.linehaul_customers) + 1
         else:
-            return to_pos > to_route.get_linehaul_count()
+            return to_pos > len(to_route.linehaul_customers)
     
     def _apply_relocate(self, solution, from_route_idx, from_pos, to_route_idx, to_pos):
 
@@ -270,7 +270,7 @@ class FirstImprovementStrategy:
         total_gain = penalty_gain + distance_gain
         solution.update_cost_with_gain(total_gain)
     
-    def _calculate_exchange_penalty_gain(self, solution, r1_idx, pos1, r2_idx, pos2) -> float:
+    def _calculate_exchange_penalty_gain(self, solution, r1_idx, pos1, r2_idx, pos2):
 
         routes = solution.get_routes()
         route1, route2 = routes[r1_idx], routes[r2_idx]
@@ -293,16 +293,16 @@ class FirstImprovementStrategy:
             # 같은 경로 내에서는 부하량 변화 없음
             return 0.0
         
-        r1_delivery_after = route1.get_delivery_load() - demand1 + demand2
-        r1_pickup_after = route1.get_pickup_load() # 같은 타입 교환이므로 한쪽만 고려
-        r2_delivery_after = route2.get_delivery_load() - demand2 + demand1
-        r2_pickup_after = route2.get_pickup_load()
+        r1_delivery_after = route1.delivery_load - demand1 + demand2
+        r1_pickup_after = route1.pickup_load # 같은 타입 교환이므로 한쪽만 고려
+        r2_delivery_after = route2.delivery_load - demand2 + demand1
+        r2_pickup_after = route2.pickup_load
         
         if route1.get(pos1) in route1.get_backhaul_customers():
-             r1_delivery_after = route1.get_delivery_load()
-             r1_pickup_after = route1.get_pickup_load() - demand1 + demand2
-             r2_delivery_after = route2.get_delivery_load()
-             r2_pickup_after = route2.get_pickup_load() - demand2 + demand1
+             r1_delivery_after = route1.delivery_load
+             r1_pickup_after = route1.pickup_load - demand1 + demand2
+             r2_delivery_after = route2.delivery_load
+             r2_pickup_after = route2.pickup_load - demand2 + demand1
         
         # 교환 후 페널티
         r1_violation = max(0, r1_delivery_after - capa) + max(0, r1_pickup_after - capa)

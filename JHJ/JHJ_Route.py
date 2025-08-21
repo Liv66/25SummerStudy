@@ -10,15 +10,26 @@ class Route:
         self.delivery_load = 0
         self.pickup_load = 0
 
-    def add_customer(self, node, index):
-        if not (0 < index < self.size()):
-            if not (isinstance(node, int) and index == self.size()):
-                raise IndexError(f"Cannot add customer at index {index}")
+    def size(self):
+        return len(self.linehaul_customers) + len(self.backhaul_customers) + 2
+
+    def add_customer(self, node, idx):
 
         if self.problem_info['node_types'][node] == 1:
-            self._add_linehaul(node, index)
+            load = self.problem_info['node_demands'][node]
+            pos = idx - 1
+
+            self.linehaul_customers.insert(pos, node)
+            self.delivery_load += load
         else:
-            self._add_backhaul(node, index)
+            load = self.problem_info['node_demands'][node]
+
+            line_count = len(self.linehaul_customers)
+
+            pos = idx - line_count - 1
+
+            self.backhaul_customers.insert(pos, node)
+            self.pickup_load += load
 
     def force_add_customer(self, node):
         if self.problem_info['node_types'][node] == 1:
@@ -30,39 +41,18 @@ class Route:
             self.backhaul_customers.insert(pos, node)
             self.pickup_load += self.problem_info['node_demands'][node]
 
-    def _add_linehaul(self, node, idx):
-        load = self.problem_info['node_demands'][node]
-        pos = idx - 1
-        if not (0 <= pos <= len(self.linehaul_customers)):
-            raise IndexError(f"Invalid linehaul position {pos}")
-        self.linehaul_customers.insert(pos, node)
-        self.delivery_load += load
 
-    def _add_backhaul(self, node, idx):
-        load = self.problem_info['node_demands'][node]
-        if self.get_linehaul_count() == 0:
-            raise ValueError("라인홀 고객 없이 백홀만으로 경로를 구성할 수 없습니다.")
-        line_count = self.get_linehaul_count()
-        if idx <= line_count:
-            raise ValueError(f"Backhaul must be after linehaul, invalid index {idx}")
-        pos = idx - line_count - 1
-        if not (0 <= pos <= len(self.backhaul_customers)):
-            raise IndexError(f"Invalid backhaul position {pos}")
-        self.backhaul_customers.insert(pos, node)
-        self.pickup_load += load
-
-    def get(self, i) -> int:
+    def get(self, i):
         if i <= 0 or i >= self.size() - 1:
             return 0
-        lc = self.get_linehaul_count()
+        lc = len(self.linehaul_customers)
         if i <= lc:
             return self.linehaul_customers[i - 1]
         return self.backhaul_customers[i - lc - 1]
 
     def remove_customer(self, i):
-        if not (0 < i < self.size() - 1):
-            raise IndexError(f"Cannot remove customer at index {i}")
-        lc = self.get_linehaul_count()
+
+        lc = len(self.linehaul_customers)
         if i <= lc:
             node = self.linehaul_customers.pop(i - 1)
             self.delivery_load -= self.problem_info['node_demands'][node]
@@ -84,7 +74,7 @@ class Route:
         except ValueError:
             raise ValueError(f"Customer {customer_id} not found in this route.")
 
-    def set_customers(self, customers: list, problem_info: dict):
+    def set_customers(self, customers, problem_info):
         self.linehaul_customers = []
         self.backhaul_customers = []
         self.delivery_load = 0
@@ -132,7 +122,7 @@ class Route:
         delivery_load_after = self.delivery_load + (customer_demand if is_linehaul else 0)
         pickup_load_after = self.pickup_load + (0 if is_linehaul else customer_demand)
 
-        capacity = self.get_capacity()
+        capacity = self.problem_info['capa']
         violation_after = max(0, delivery_load_after - capacity) + max(0, pickup_load_after - capacity)
         penalty_after = violation_after * penalty_rate
 
@@ -142,41 +132,20 @@ class Route:
 
     def get_penalty_cost(self, penalty_rate):
         penalty = 0.0
-        capacity = self.get_capacity()
-        linehaul_violation = max(0, self.get_delivery_load() - capacity)
-        backhaul_violation = max(0, self.get_pickup_load() - capacity)
+        capacity = self.problem_info['capa']
+        linehaul_violation = max(0, self.delivery_load - capacity)
+        backhaul_violation = max(0, self.pickup_load - capacity)
         penalty += (linehaul_violation + backhaul_violation) * penalty_rate
         return penalty
 
-    def get_delivery_load(self):
-        return self.delivery_load
-
-    def get_pickup_load(self):
-        return self.pickup_load
-
-    def get_capacity(self) -> float:
-        return self.problem_info['capa']
-
     def get_customers(self):
         return self.linehaul_customers + self.backhaul_customers
-
-    def get_customers_count(self) -> int:
-        return len(self.linehaul_customers) + len(self.backhaul_customers)
 
     def get_linehaul_customers(self):
         return list(self.linehaul_customers)
 
     def get_backhaul_customers(self):
         return list(self.backhaul_customers)
-
-    def get_linehaul_count(self):
-        return len(self.linehaul_customers)
-
-    def get_backhaul_count(self):
-        return len(self.backhaul_customers)
-
-    def size(self):
-        return len(self.linehaul_customers) + len(self.backhaul_customers) + 2
 
     def __iter__(self):
         yield 0

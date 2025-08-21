@@ -36,7 +36,7 @@ class IteratedLocalSearchSolver:
 
         iteration = 0
         iterations_no_improvement = 0
-        max_iters_no_improvement = 100 # 개선 안되는 횟수
+        max_iters_no_improvement = 200 # 개선 안되는 횟수
 
         # perturb에서 아예 새로운 greedy_construction 초기해에서 시작 ?
 
@@ -58,7 +58,7 @@ class IteratedLocalSearchSolver:
 
             # 4. 교란 (Perturbation)
             #
-            strength = 0.5 + (iterations_no_improvement * 0.01) if iterations_no_improvement <= 30 else 0.7
+            strength = 0.5 + (iterations_no_improvement * 0.01) if iterations_no_improvement <= 30 else 0.5
             perturbed_solution = self._perturb(best_solution, instance, strength)
 
 
@@ -154,11 +154,11 @@ class IteratedLocalSearchSolver:
                 is_linehaul = problem_info['node_types'][customer] == 1
                 start_idx, end_idx = 0, 0
                 if is_linehaul:
-                    start_idx, end_idx = 1, route.get_linehaul_count() + 1
+                    start_idx, end_idx = 1, len(route.linehaul_customers) + 1
                 else:
-                    if route.get_linehaul_count() == 0: continue
-                    start_idx = route.get_linehaul_count() + 1
-                    end_idx = route.size()
+                    if len(route.linehaul_customers) == 0: continue
+                    start_idx = len(route.linehaul_customers) + 1
+                    end_idx = route.size() - 1
                 # 비용이 적게 증가하는 위치에 다시 삽입
                 for i in range(start_idx, end_idx + 1):
                     cost_increase = route.get_cost_increase_for_insertion(customer, i, solution.penalty_rate)
@@ -170,6 +170,6 @@ class IteratedLocalSearchSolver:
             if best_route:
                 best_route.add_customer(customer, best_index)
             else:
-                target_route = min(solution.get_routes(), key=lambda r: r.get_delivery_load() + r.get_pickup_load())
+                target_route = min(solution.get_routes(), key=lambda r: r.delivery_load + r.pickup_load)
                 target_route.force_add_customer(customer)
         solution.invalidate()

@@ -110,8 +110,6 @@ def plot_vrpb(problem_info, best_result_route=[], title=''):
         else:
             plt.scatter(nodes_coord[i][0], nodes_coord[i][1], s=35, marker='^', color='red')
 
-        plt.text(nodes_coord[i][0], nodes_coord[i][1], f'{i}', ha='left', va='bottom', fontsize=8)
-
     for route in best_result_route:
         points_x = [nodes_coord[x][0] for x in route]
         points_y = [nodes_coord[x][1] for x in route]

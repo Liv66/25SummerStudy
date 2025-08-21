@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import List
 from JHJ_Route import Route
 
 class CVRPBSolution:
@@ -13,9 +12,7 @@ class CVRPBSolution:
     def get_routes(self):
         return self.routes
         
-    def get_problem_info(self) -> dict:
-        if not self.routes:
-            raise ValueError("Cannot get problem info from a solution with no routes.")
+    def get_problem_info(self):
         return self.routes[0].problem_info
 
 

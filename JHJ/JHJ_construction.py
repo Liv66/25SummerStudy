@@ -17,7 +17,7 @@ class GreedyConstructionStrategy:
         # 2. 페널티 비용
         demands = problem_info['node_demands']
         types = problem_info['node_types']
-        capacity = route.get_capacity()
+        capacity = problem_info['capa']
         customer_demand = demands[customer]
         
         construction_penalty_rate = 10000
@@ -27,11 +27,11 @@ class GreedyConstructionStrategy:
 
         #
         if types[customer] == 1: # linehaul
-            delivery_load_after = route.get_delivery_load() + customer_demand
-            pickup_load_after = route.get_pickup_load()
+            delivery_load_after = route.delivery_load + customer_demand
+            pickup_load_after = route.pickup_load
         else: # backhaul
-            delivery_load_after = route.get_delivery_load()
-            pickup_load_after = route.get_pickup_load() + customer_demand
+            delivery_load_after = route.delivery_load
+            pickup_load_after = route.pickup_load + customer_demand
         
         violation_after = max(0, delivery_load_after - capacity) + max(0, pickup_load_after - capacity)
         penalty_after = violation_after * construction_penalty_rate
@@ -59,11 +59,11 @@ class GreedyConstructionStrategy:
 
             for route in routes:
                 if is_linehaul:
-                    start_idx, end_idx = 1, route.get_linehaul_count() + 1
+                    start_idx, end_idx = 1, len(route.linehaul_customers) + 1
                 else:
-                    if route.get_linehaul_count() == 0:
+                    if len(route.linehaul_customers) == 0:
                         continue
-                    start_idx = route.get_linehaul_count() + 1
+                    start_idx = len(route.linehaul_customers) + 1
                     end_idx = route.size() - 1
                 # 노드를 각 경로 내에서도 어디에 넣어야할지 N번 확인
                 for i in range(start_idx, end_idx + 1):
@@ -80,7 +80,7 @@ class GreedyConstructionStrategy:
             else:
                 # 삽입 위치를 찾지 못하면 강제 할당
                 customer_to_assign = unassigned_customers.pop(0)
-                target_route = min(routes, key=lambda r: r.get_delivery_load() + r.get_pickup_load())
+                target_route = min(routes, key=lambda r: r.delivery_load + r.pickup_load)
                 target_route.force_add_customer(customer_to_assign)
                 if log:
                     print(f"강제 할당 : {customer_to_assign}")
